@@ -466,41 +466,72 @@ function renderVerteilungen() {
   });
 }
 
-var stream = null, reader = null, detector = null, timer = 0;
+var stream = null, detector = null, timer = 0, zx = null, zxCanvas = null;
 function hints() {
   var h = new Map();
   h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128]);
   h.set(ZXing.DecodeHintType.TRY_HARDER, true);
   return h;
 }
+function nativeDetector() {
+  if (!('BarcodeDetector' in window) || typeof window.BarcodeDetector.getSupportedFormats !== 'function') {
+    return Promise.resolve(null);
+  }
+  return window.BarcodeDetector.getSupportedFormats().then(function (f) {
+    if (!f || f.indexOf('qr_code') < 0 || f.indexOf('code_128') < 0) return null;
+    return new window.BarcodeDetector({ formats:['qr_code','code_128'] });
+  }).catch(function () { return null; });
+}
+function zxDecodeFrame(v) {
+  var w = v.videoWidth, h = v.videoHeight;
+  if (!w || !h) return null;
+  var scale = w > 1280 ? 1280 / w : 1;
+  var cw = Math.round(w * scale), ch = Math.round(h * scale);
+  if (!zxCanvas) zxCanvas = document.createElement('canvas');
+  if (zxCanvas.width !== cw || zxCanvas.height !== ch) { zxCanvas.width = cw; zxCanvas.height = ch; }
+  zxCanvas.getContext('2d', { willReadFrequently:true }).drawImage(v, 0, 0, cw, ch);
+  var src = new ZXing.HTMLCanvasElementLuminanceSource(zxCanvas);
+  var bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(src));
+  try { return zx.decodeWithState(bmp); } catch (e) { return null; }
+}
+function scanLoop(v) {
+  var useNative = !!detector, nativeMiss = 0;
+  (function tick() {
+    if (!stream) return;
+    if (v.readyState < 2 || !v.videoWidth) { timer = setTimeout(tick, 120); return; }
+    if (useNative) {
+      detector.detect(v).then(function (c) {
+        if (c && c.length) { nativeMiss = 0; onScan(c[0].rawValue); }
+        else if (++nativeMiss > 60) useNative = false;
+      }).catch(function () { useNative = false; }).then(function () {
+        if (stream) timer = setTimeout(tick, 180);
+      });
+      return;
+    }
+    if (!zx) { zx = new ZXing.MultiFormatReader(); zx.setHints(hints()); }
+    var r = zxDecodeFrame(v);
+    if (r) onScan(r.getText());
+    timer = setTimeout(tick, r ? 400 : 120);
+  })();
+}
 function startCam() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { flashT('bad', 'noCam'); return; }
   beep('ok');
+  var v = $('video');
   navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1920 }, height:{ ideal:1080 } }, audio:false
   }).then(function (s) {
-    stream = s; $('video').srcObject = s;
+    stream = s; v.srcObject = s;
     show($('cam'), true); $('btnCam').textContent = t('camOff');
-    return $('video').play();
-  }).then(function () {
-    if ('BarcodeDetector' in window) {
-      detector = new window.BarcodeDetector({ formats:['qr_code','code_128'] });
-      (function tick() {
-        if (!detector || !stream) return;
-        detector.detect($('video')).then(function (c) { if (c && c.length) onScan(c[0].rawValue); })
-          .catch(function () {});
-        timer = setTimeout(tick, 180);
-      })();
-    } else {
-      reader = new ZXing.BrowserMultiFormatReader(hints(), { delayBetweenScanAttempts:180 });
-      reader.decodeFromStream(stream, $('video'), function (res) { if (res) onScan(res.getText()); });
-    }
-  }).catch(function (e) { flashT('bad', 'noCam', (e && e.name) || ''); });
+    return v.play().catch(function () {});
+  }).then(nativeDetector).then(function (d) {
+    detector = d;
+    scanLoop(v);
+  }).catch(function (e) { stopCam(); flashT('bad', 'noCam', (e && e.name) || ''); });
 }
 function stopCam() {
   if (timer) { clearTimeout(timer); timer = 0; }
   detector = null;
-  if (reader) { try { reader.reset(); } catch (e) {} reader = null; }
   if (stream) { stream.getTracks().forEach(function (x) { x.stop(); }); stream = null; }
   $('video').srcObject = null;
   show($('cam'), false); $('btnCam').textContent = t('cam');
