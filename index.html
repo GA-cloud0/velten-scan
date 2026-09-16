@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#006935">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Velten Scan</title>
+<style>  :root {
+
+    --gruen:#006935; --hell:#8EC31F; --rot:#E60013;
+    --bg:#ffffff; --panel:#f4f6f4; --line:#dfe4e0; --text:#14211b; --dim:#6b7a72;
+    --ok:#006935; --warn:#8f5700; --bad:#E60013; --accent:#006935;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    overscroll-behavior:none; }
+  body { display:flex; flex-direction:column;
+    padding-top:env(safe-area-inset-top,0); padding-bottom:env(safe-area-inset-bottom,0); }
+
+  header { display:flex; align-items:center; gap:8px; padding:7px 10px;
+    background:var(--gruen); flex:0 0 auto; }
+  #logo { height:30px; width:auto; flex:0 0 auto; display:block; }
+  header .sp { flex:1; }
+  .tag { font-size:12px; padding:3px 8px; border-radius:99px;
+    background:rgba(255,255,255,.18); color:#fff; }
+  .tag:empty { display:none; }
+  .tag.on { background:var(--hell); color:var(--gruen); font-weight:700; }
+  .tag.off { background:var(--rot); color:#fff; font-weight:700; }
+  #lang { font-size:12px; font-weight:700; color:#fff; background:rgba(255,255,255,.18);
+    border:0; border-radius:99px; padding:5px 10px; }
+  #gear { border:0; background:transparent; color:#fff; font-size:18px; padding:2px 4px; }
+
+  #flash { flex:0 0 auto; padding:14px 10px; text-align:center; background:var(--panel);
+    border-bottom:1px solid var(--line); color:var(--text); }
+  #flash .a { font-size:26px; font-weight:800; line-height:1.15; word-break:break-word; }
+  #flash .b { font-size:14px; opacity:.9; margin-top:2px; }
+  #flash .b:empty { display:none; }
+  #flash.ok { background:var(--ok); color:#fff; }
+  #flash.warn { background:var(--warn); color:#fff; }
+  #flash.bad { background:var(--bad); color:#fff; }
+
+  nav { display:flex; flex:0 0 auto; background:var(--bg); border-bottom:1px solid var(--line); }
+  nav button { flex:1; padding:11px 2px; border:0; background:transparent; color:var(--dim);
+    font-size:15px; font-weight:600; border-bottom:3px solid transparent; }
+  nav button.sel { color:var(--text); border-bottom-color:var(--accent); }
+
+  main { flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:10px; }
+  .hide { display:none !important; }
+
+  .cam { position:relative; background:#000; border-radius:10px; overflow:hidden; margin-bottom:8px; }
+  .cam video { width:100%; max-height:34vh; display:block; object-fit:cover; }
+  .cam .fr { position:absolute; inset:20% 6%; border:2px solid rgba(255,255,255,.9); border-radius:6px;
+    box-shadow:0 0 0 2000px rgba(0,0,0,.3); pointer-events:none; }
+  .cam .fr::after { content:""; position:absolute; left:0; right:0; top:50%; height:2px; background:#e53e3e; }
+
+  .two { display:flex; gap:8px; }
+  button.b { flex:1; padding:14px 8px; font-size:16px; font-weight:700; border:0; border-radius:10px;
+    background:var(--accent); color:#fff; }
+  button.b.g { background:var(--panel); color:var(--text); border:1px solid var(--line); }
+  button.b.w { width:100%; }
+  input { width:100%; padding:13px; font-size:17px; border-radius:10px; border:1px solid var(--line);
+    background:var(--bg); color:var(--text); margin-top:8px; }
+  #cfgCode { font-size:30px; text-align:center; letter-spacing:8px; font-weight:800;
+    text-transform:uppercase; font-family:ui-monospace,Menlo,monospace; }
+
+  .big { font-size:32px; font-weight:800; text-align:center; padding:16px 8px;
+    background:var(--panel); border:2px solid var(--gruen); border-radius:10px;
+    margin:10px 0 8px; word-break:break-word; color:var(--gruen); }
+  .sscc { font-family:ui-monospace,Menlo,monospace; font-size:15px; text-align:center;
+    color:var(--dim); letter-spacing:1px; }
+  .row { display:flex; align-items:center; gap:8px; padding:10px; background:var(--panel);
+    border:1px solid var(--line); border-radius:9px; margin-top:6px; font-size:15px; }
+  .row .g { flex:1; min-width:0; }
+  .row .m { font-family:ui-monospace,Menlo,monospace; }
+  .row .s { color:var(--dim); font-size:13px; }
+  .row .x { color:var(--dim); font-size:22px; padding:0 6px; }
+  .hint { font-size:12px; color:var(--dim); margin-top:4px; min-height:16px; }
+  .lbl { font-size:12px; color:var(--dim); margin-top:10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <img id="logo" src="logo.png" alt="go asia">
+  <span class="sp"></span>
+  <span id="cnt" class="tag"></span>
+  <span id="who" class="tag"></span>
+  <span id="net" class="tag"></span>
+  <button id="lang">DE</button>
+  <button id="gear">&#9881;</button>
+</header>
+
+<section id="setup" class="hide" style="padding:10px">
+  <div id="pairBox">
+    <div class="lbl" data-t="code">Code</div>
+    <input id="cfgCode" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="6">
+    <div style="height:10px"></div>
+    <button id="cfgPair" class="b w" data-t="save">OK</button>
+  </div>
+  <div id="doneBox" class="hide">
+    <div class="row"><span class="g" id="meName"></span><span class="s" id="meRole"></span></div>
+    <button id="cfgUnpair" class="b g w" data-t="unpair">Abmelden</button>
+  </div>
+  <div id="cfgMsg" class="hint"></div>
+  <div class="lbl">URL</div>
+  <input id="cfgApi" type="url" autocomplete="off">
+</section>
+
+<div id="app" class="hide" style="display:flex;flex-direction:column;flex:1;min-height:0">
+  <div id="flash"><div class="a"></div><div class="b"></div></div>
+
+  <nav>
+    <button data-mode="bind" class="sel" data-t="bind">Binden</button>
+    <button data-mode="ship" data-t="ship">Ausgang</button>
+    <button data-mode="info" data-t="info">Suchen</button>
+  </nav>
+
+  <main>
+    <div class="cam hide" id="cam"><video id="video" playsinline muted autoplay></video><div class="fr"></div></div>
+    <div class="two">
+      <button id="btnCam" class="b" data-t="cam">Kamera</button>
+      <button id="btnShot" class="b g" data-t="photo">Foto</button>
+    </div>
+    <input id="photo" type="file" accept="image/*" capture="environment" class="hide">
+    <form id="manForm" autocomplete="off"><input id="manual" type="text"></form>
+    <div id="manHint" class="hint"></div>
+
+    <section id="mBind">
+      <div id="palletBox" class="hide">
+        <div class="big" id="storeBig">&ndash;</div>
+        <div class="sscc" id="ssccTxt"></div>
+        <div id="lidList"></div>
+        <div style="height:8px"></div>
+        <div class="two">
+          <button id="btnCommit" class="b" data-t="done">Fertig</button>
+          <button id="btnDrop" class="b g" data-t="drop">Verwerfen</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="mShip" class="hide"><div id="vList"></div></section>
+    <section id="mInfo" class="hide"><div id="infoOut"></div></section>
+
+    <div style="height:14px"></div>
+    <button id="btnSync" class="b g w" data-t="reload">Laden</button>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js">
+</script>
+<script>(function () {
+'use strict';
+
+var TXT = {
+  de: { title:'Velten Scan', bind:'Binden', ship:'Ausgang', info:'Suchen',
+        cam:'Kamera', camOff:'Stopp', photo:'Foto', done:'Fertig', drop:'Verwerfen',
+        reload:'Laden', save:'OK', code:'Code', unpair:'Abmelden',
+        ready:'Bereit', newPal:'Neue Palette', saved:'Gespeichert',
+        already:'Schon drauf', unknown:'Unbekannt', needCode:'Erst Barcode',
+        otherStore:'Andere Filiale', boundElse:'Klebt schon woanders', shipped:'Ausgang',
+        check:'Pruefziffer falsch', offline:'Offline', noRead:'Nichts erkannt',
+        noCam:'Keine Kamera', reading:'…', dropped:'Verworfen', notFound:'Nicht gefunden',
+        askShip:'Ganze Verteilung ausliefern?', askOpen:'Nicht gebundene Aufkleber. Trotzdem?',
+        needPair:'Anmelden', codeBad:'Code falsch', locked:'Gesperrt', readonly:'Nur Lesen' },
+  zh: { title:'Velten 扫描', bind:'绑定', ship:'出货', info:'查询',
+        cam:'摄像头', camOff:'停止', photo:'拍照', done:'完成', drop:'取消',
+        reload:'刷新', save:'确定', code:'配对码', unpair:'解除',
+        ready:'就绪', newPal:'新板', saved:'已保存',
+        already:'已在本板', unknown:'未知编号', needCode:'请先扫条码',
+        otherStore:'门店不符', boundElse:'已绑其他板', shipped:'已出货',
+        check:'校验位错误', offline:'离线', noRead:'未识别',
+        noCam:'无摄像头', reading:'…', dropped:'已取消', notFound:'未找到',
+        askShip:'整次分货出货？', askOpen:'尚有未绑定贴纸，仍要出货？',
+        needPair:'请先配对', codeBad:'配对码错误', locked:'已锁定', readonly:'只读' }
+};
+var lang = 'de';
+function t(k) { return (TXT[lang] && TXT[lang][k]) || TXT.de[k] || k; }
+
+var K = { cfg:'velten.cfg', cache:'velten.cache', queue:'velten.queue', lang:'velten.lang' };
+function ls(k, v) {
+  try {
+    if (v === undefined) { var s = localStorage.getItem(k); return s ? JSON.parse(s) : null; }
+    localStorage.setItem(k, JSON.stringify(v));
+  } catch (e) { return null; }
+}
+var cfg = ls(K.cfg) || { api:'', tok:'', who:'', rw:true };
+
+(function fromLink() {
+  var raw = (location.hash || '').replace(/^#/, '') || (location.search || '').replace(/^\?/, '');
+  if (!raw) return;
+  var p = new URLSearchParams(raw), got = false;
+  if (p.get('api')) { cfg.api = p.get('api'); got = true; }
+  if (got) { ls(K.cfg, cfg); history.replaceState(null, '', location.pathname); }
+})();
+
+function $(id) { return document.getElementById(id); }
+function show(el, on) { el.classList.toggle('hide', !on); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+  return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c]; }); }
+
+var actx = null;
+function beep(kind) {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.connect(g); g.connect(actx.destination);
+    o.frequency.value = kind === 'bad' ? 220 : kind === 'warn' ? 520 : 990;
+    g.gain.setValueAtTime(0.001, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.35, actx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + (kind === 'bad' ? 0.45 : 0.14));
+    o.start(); o.stop(actx.currentTime + (kind === 'bad' ? 0.46 : 0.15));
+  } catch (e) {}
+}
+
+var meldung = { kind:'', key:'ready', a:'', b:'', bKey:'' };
+function paint() {
+  var el = $('flash');
+  el.className = meldung.kind || '';
+  var a = meldung.key ? t(meldung.key) : meldung.a;
+  var b = meldung.bKey ? t(meldung.bKey) : meldung.b;
+  el.innerHTML = '<div class="a">' + esc(a) + '</div><div class="b">' + esc(b || '') + '</div>';
+}
+function signal(kind) {
+  beep(kind === 'bad' ? 'bad' : kind === 'warn' ? 'warn' : 'ok');
+  try { if (navigator.vibrate) navigator.vibrate(kind === 'bad' ? [90,70,90] : 45); } catch (e) {}
+}
+function flash(kind, a, b, bKey) {
+  meldung = { kind:kind, key:'', a:a, b:b, bKey:bKey || '' };
+  paint(); signal(kind);
+}
+function flashT(kind, key, b, bKey) {
+  meldung = { kind:kind, key:key, a:'', b:b, bKey:bKey || '' };
+  paint(); signal(kind);
+}
+
+function applyLang() {
+  document.documentElement.lang = lang === 'zh' ? 'zh' : 'de';
+  document.title = t('title');
+  Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (el) {
+    el.textContent = t(el.dataset.t);
+  });
+  $('lang').textContent = lang === 'zh' ? '中' : 'DE';
+  $('btnCam').textContent = stream ? t('camOff') : t('cam');
+  $('meRole').textContent = cfg.rw ? '' : t('readonly');
+  paint();
+  renderVerteilungen();
+}
+
+var LID_RE = /^T-\d{4}[A-Z]-\d{3}$/;
+
+function ssccCore(raw) {
+  var d = String(raw == null ? '' : raw).replace(/[^0-9]/g, '');
+  return d.length >= 18 ? d.slice(-18) : '';
+}
+function ssccShow(core) { return core ? '00' + core : ''; }
+function normSscc(raw) { return ssccShow(ssccCore(raw)); }
+function ssccEq(a, b) { var x = ssccCore(a); return x !== '' && x === ssccCore(b); }
+function gs1Ok(raw) {
+  var s = ssccCore(raw);
+  if (!s) return false;
+  var sum = 0;
+  for (var i = 0; i < 17; i++) sum += Number(s.charAt(16 - i)) * (i % 2 === 0 ? 3 : 1);
+  return ((10 - sum % 10) % 10) === Number(s.charAt(17));
+}
+function classify(x) {
+  var s = String(x || '').trim().toUpperCase();
+  if (LID_RE.test(s)) return { kind:'lid', value:s };
+  var c = ssccCore(s);
+  if (c) return { kind:'sscc', value:ssccShow(c), checkOk:gs1Ok(c) };
+  return { kind:null, value:s };
+}
+
+function apiGet(action, params) {
+  var p = new URLSearchParams(Object.assign({ action:action, tok:cfg.tok }, params || {}));
+  return fetch(cfg.api + (cfg.api.indexOf('?') < 0 ? '?' : '&') + p.toString())
+    .then(function (r) { return r.json(); }).then(guard);
+}
+function apiPost(action, body) {
+
+  return fetch(cfg.api, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=UTF-8' },
+    body:JSON.stringify(Object.assign({ action:action, tok:cfg.tok }, body || {})) })
+    .then(function (r) { return r.json(); }).then(guard);
+}
+
+function guard(d) {
+  if (d && d.ok === false && d.code === 'auth') {
+    cfg.tok = ''; cfg.who = ''; ls(K.cfg, cfg);
+    openSetup(true);
+    flashT('bad', 'needPair');
+  }
+  return d;
+}
+
+var queue = ls(K.queue) || [], flushing = false;
+var cache = ls(K.cache) || { at:0, verteilungen:[], labels:[] };
+var byLid = {};
+function reindex() {
+  byLid = {};
+  (cache.labels || []).forEach(function (l) { byLid[l.lid] = l; });
+  var n = (cache.labels || []).length;
+  var offen = (cache.labels || []).filter(function (l) { return l.status === '待绑定'; }).length;
+  $('cnt').textContent = n ? (n - offen) + '/' + n : '';
+  renderVerteilungen();
+}
+
+function setNet(on) {
+  var el = $('net');
+  if (queue.length) { el.textContent = '⇧' + queue.length; el.className = 'tag off'; return; }
+  el.textContent = on ? '●' : '○';
+  el.className = 'tag ' + (on ? 'on' : 'off');
+}
+function queueShow() { setNet(navigator.onLine !== false); }
+function sync() {
+  return apiGet('sync').then(function (d) {
+    if (!d.ok) throw new Error(d.error);
+    cache = { at:Date.now(), verteilungen:d.verteilungen || [], labels:d.labels || [] };
+    ls(K.cache, cache); reindex(); setNet(true);
+  }).catch(function () { setNet(false); });
+}
+
+function enqueue(job) { queue.push(job); ls(K.queue, queue); queueShow(); flush(); }
+function flush() {
+  if (flushing || !queue.length) return Promise.resolve();
+  flushing = true;
+  var job = queue[0];
+  return apiPost(job.action, job.body).then(function (d) {
+    if (d && (d.ok || d.code)) { queue.shift(); ls(K.queue, queue); setNet(true); queueShow(); }
+    flushing = false;
+    if (queue.length) return flush();
+  }).catch(function () { flushing = false; setNet(false); });
+}
+window.addEventListener('online', function () { setNet(true); flush(); });
+window.addEventListener('offline', function () { setNet(false); });
+
+var mode = 'bind';
+Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
+  b.onclick = function () {
+    Array.prototype.forEach.call(document.querySelectorAll('nav button'),
+      function (x) { x.classList.remove('sel'); });
+    b.classList.add('sel');
+    mode = b.dataset.mode;
+    show($('mBind'), mode === 'bind');
+    show($('mShip'), mode === 'ship');
+    show($('mInfo'), mode === 'info');
+    flashT('', mode);
+  };
+});
+
+var pal = null;
+function palRender() {
+  show($('palletBox'), !!pal);
+  if (!pal) return;
+  var st = {};
+  pal.lids.forEach(function (l) { st[l.store] = 1; });
+  var names = Object.keys(st);
+  $('storeBig').textContent = names.length ? names.join(' / ') : '–';
+  $('ssccTxt').textContent = pal.sscc.replace(/(\d{4})(?=\d)/g, '$1 ');
+  $('lidList').innerHTML = pal.lids.map(function (l, i) {
+    return '<div class="row"><span class="g"><span class="m">' + esc(l.lid) + '</span>' +
+      '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) + '</div></span>' +
+      '<span class="x" data-rm="' + i + '">&times;</span></div>';
+  }).join('');
+  Array.prototype.forEach.call($('lidList').querySelectorAll('[data-rm]'), function (x) {
+    x.onclick = function () { pal.lids.splice(Number(x.dataset.rm), 1); palRender(); };
+  });
+}
+function palCommit(silent) {
+  if (!pal || !pal.lids.length) { pal = null; palRender(); return; }
+  enqueue({ action:'bindPallet', body:{ sscc:pal.sscc, lids:pal.lids.map(function (l) { return l.lid; }) } });
+  pal.lids.forEach(function (l) {
+    var c = byLid[l.lid];
+    if (c) { c.status = '已绑定'; c.sscc = pal.sscc; }
+  });
+  ls(K.cache, cache); reindex();
+  if (!silent) flashT('ok', 'saved', pal.lids.length + '');
+  pal = null; palRender();
+}
+
+var lastText = '', lastAt = 0;
+function onScan(text) {
+  var now = Date.now();
+  if (text === lastText && now - lastAt < 2500) return;
+  lastText = text; lastAt = now;
+  var c = classify(text);
+  if (!c.kind) { flashT('bad', 'noRead'); return; }
+  if (mode === 'info') return doInfo(c);
+  if (mode === 'ship') return doShip(c);
+  return doBind(c);
+}
+
+function doBind(c) {
+  if (c.kind === 'sscc') {
+    if (pal && ssccEq(pal.sscc, c.value)) { flashT('warn', 'already'); return; }
+    if (pal) palCommit(true);
+    pal = { sscc:c.value, checkOk:c.checkOk, lids:[] };
+    palRender();
+    if (c.checkOk) flashT('ok', 'newPal', c.value.slice(-6));
+    else flashT('warn', 'newPal', '', 'check');
+    return;
+  }
+  if (!pal) { flashT('bad', 'needCode'); return; }
+  var l = byLid[c.value];
+  if (!l) { flashT('bad', 'unknown', c.value); return; }
+  if (pal.lids.some(function (x) { return x.lid === c.value; })) { flashT('warn', 'already'); return; }
+  if (l.sscc && !ssccEq(l.sscc, pal.sscc)) flashT('bad', 'boundElse', String(l.sscc).slice(-6));
+  var fremd = pal.lids.filter(function (x) { return x.store !== l.store; });
+  pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid });
+  palRender();
+  if (fremd.length) flashT('warn', 'otherStore', fremd[0].store + ' / ' + l.store);
+  else flash('ok', l.store, l.seq + '/' + l.total);
+}
+
+function doShip(c) {
+  if (c.kind !== 'sscc') { flashT('bad', 'needCode'); return; }
+  enqueue({ action:'shipPallet', body:{ sscc:c.value } });
+  flashT('ok', 'shipped', c.value.slice(-6));
+}
+
+function doInfo(c) {
+  var out = $('infoOut');
+  var l = c.kind === 'lid' ? byLid[c.value] : null;
+  if (l) {
+    out.innerHTML = '<div class="row"><span class="g"><span class="m">' + esc(l.lid) + '</span>' +
+      '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) + ' · ' +
+      esc(l.vid) + ' · ' + esc(l.status) + '</div></span></div>';
+    flash('ok', l.store, l.seq + '/' + l.total);
+    return;
+  }
+  flashT('', 'reading');
+  apiGet('lookup', { q:c.value }).then(function (d) {
+    if (!d.ok || !d.found) { out.innerHTML = ''; flashT('warn', 'notFound'); return; }
+    var p = d.pallet || d.label;
+    out.innerHTML = '<div class="row"><span class="g">' + esc(p.store || '') +
+      '<div class="s">' + esc(p.status || '') + '</div></span></div>';
+    flash('ok', p.store || '', p.status || '');
+  }).catch(function () { flashT('bad', 'offline'); });
+}
+
+function renderVerteilungen() {
+  var el = $('vList');
+  if (!el) return;
+  el.innerHTML = (cache.verteilungen || []).map(function (v) {
+    return '<div class="row"><span class="g"><span class="m">' + esc(v.vid) + '</span>' +
+      '<div class="s">' + esc(v.name) + '</div></span>' +
+      '<button class="b" style="flex:0 0 auto;padding:9px 14px" data-ship="' + esc(v.vid) + '">&#9654;</button></div>';
+  }).join('');
+  Array.prototype.forEach.call(el.querySelectorAll('[data-ship]'), function (b) {
+    b.onclick = function () {
+      var vid = b.dataset.ship;
+      if (!confirm(vid + '\n' + t('askShip'))) return;
+      apiPost('shipVerteilung', { vid:vid }).then(function (d) {
+        if (d.ok) { flashT('ok', 'shipped', vid); sync(); }
+        else if (d.code === 'unbound_labels') {
+          if (confirm(d.unbound.length + '\n' + t('askOpen'))) {
+            apiPost('shipVerteilung', { vid:vid, force:true }).then(function () { sync(); });
+          }
+        } else if (d.code === 'readonly') flashT('bad', 'readonly');
+        else flash('bad', d.error || d.code || '');
+      }).catch(function () { flashT('bad', 'offline'); });
+    };
+  });
+}
+
+var stream = null, reader = null, detector = null, timer = 0;
+function hints() {
+  var h = new Map();
+  h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128]);
+  h.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  return h;
+}
+function startCam() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { flashT('bad', 'noCam'); return; }
+  beep('ok');
+  navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1920 }, height:{ ideal:1080 } }, audio:false
+  }).then(function (s) {
+    stream = s; $('video').srcObject = s;
+    show($('cam'), true); $('btnCam').textContent = t('camOff');
+    return $('video').play();
+  }).then(function () {
+    if ('BarcodeDetector' in window) {
+      detector = new window.BarcodeDetector({ formats:['qr_code','code_128'] });
+      (function tick() {
+        if (!detector || !stream) return;
+        detector.detect($('video')).then(function (c) { if (c && c.length) onScan(c[0].rawValue); })
+          .catch(function () {});
+        timer = setTimeout(tick, 180);
+      })();
+    } else {
+      reader = new ZXing.BrowserMultiFormatReader(hints(), { delayBetweenScanAttempts:180 });
+      reader.decodeFromStream(stream, $('video'), function (res) { if (res) onScan(res.getText()); });
+    }
+  }).catch(function (e) { flashT('bad', 'noCam', (e && e.name) || ''); });
+}
+function stopCam() {
+  if (timer) { clearTimeout(timer); timer = 0; }
+  detector = null;
+  if (reader) { try { reader.reset(); } catch (e) {} reader = null; }
+  if (stream) { stream.getTracks().forEach(function (x) { x.stop(); }); stream = null; }
+  $('video').srcObject = null;
+  show($('cam'), false); $('btnCam').textContent = t('cam');
+}
+$('btnCam').onclick = function () { stream ? stopCam() : startCam(); };
+
+$('btnShot').onclick = function () { $('photo').click(); };
+$('photo').onchange = function (ev) {
+  var f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  flashT('', 'reading');
+  var img = new Image();
+  img.onload = function () {
+    new ZXing.BrowserMultiFormatReader(hints()).decodeFromImageElement(img)
+      .then(function (r) { URL.revokeObjectURL(img.src); onScan(r.getText()); })
+      .catch(function () { URL.revokeObjectURL(img.src); flashT('bad', 'noRead'); });
+  };
+  img.src = URL.createObjectURL(f);
+};
+
+$('manForm').onsubmit = function (e) {
+  e.preventDefault();
+  var v = $('manual').value.trim();
+  if (!v) return;
+  onScan(v); $('manual').value = ''; $('manHint').textContent = '';
+};
+$('manual').oninput = function () {
+  var d = $('manual').value.replace(/[^0-9]/g, '');
+  if (d.length >= 18) {
+    $('manHint').innerHTML = gs1Ok(d)
+      ? '<span style="color:var(--ok)">&#10003;</span>'
+      : '<span style="color:var(--bad)">&#10007; ' + esc(t('check')) + '</span>';
+  } else {
+    $('manHint').textContent = d.length ? d.length + '/18' : '';
+  }
+};
+
+$('btnCommit').onclick = function () { palCommit(); };
+$('btnDrop').onclick = function () { pal = null; palRender(); flashT('', 'dropped'); };
+$('btnSync').onclick = function () { sync().then(function () { flashT('ok', 'reload'); }); };
+$('lang').onclick = function () { lang = lang === 'zh' ? 'de' : 'zh'; ls(K.lang, lang); applyLang(); };
+
+function openSetup(on) {
+  show($('setup'), on); show($('app'), !on);
+  if (!on) return;
+  $('cfgApi').value = cfg.api;
+  $('cfgCode').value = '';
+  show($('pairBox'), !cfg.tok);
+  show($('doneBox'), !!cfg.tok);
+  $('meName').textContent = cfg.who || '';
+  $('meRole').textContent = cfg.rw ? '' : t('readonly');
+}
+$('gear').onclick = function () { openSetup($('setup').classList.contains('hide')); };
+
+$('cfgPair').onclick = function () {
+  var api = $('cfgApi').value.trim();
+  var code = $('cfgCode').value.trim().toUpperCase();
+  if (!api || api.indexOf('/exec') < 0 || !code) { $('cfgMsg').textContent = '!'; return; }
+  cfg.api = api; ls(K.cfg, cfg);
+  $('cfgMsg').textContent = t('reading');
+  apiPost('pair', { code:code }).then(function (d) {
+    if (!d.ok) {
+      $('cfgMsg').textContent = d.code === 'locked' ? t('locked') : t('codeBad');
+      return;
+    }
+    cfg.tok = d.token; cfg.who = d.who; cfg.rw = !!d.rw;
+    ls(K.cfg, cfg);
+    $('cfgMsg').textContent = '';
+    boot();
+  }).catch(function () { $('cfgMsg').textContent = t('offline'); });
+};
+
+$('cfgUnpair').onclick = function () {
+  cfg.tok = ''; cfg.who = ''; ls(K.cfg, cfg);
+  openSetup(true);
+};
+
+$('cfgCode').oninput = function () {
+  this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+};
+
+lang = ls(K.lang) || ((navigator.language || '').slice(0, 2) === 'zh' ? 'zh' : 'de');
+function boot() {
+  $('who').textContent = cfg.who || '';
+  openSetup(false);
+  meldung = { kind:'', key:'ready', a:'', b:'', bKey:'' };
+  applyLang(); reindex(); queueShow(); sync().then(flush);
+}
+if (cfg.api && cfg.tok) {
+  boot();
+} else {
+  openSetup(true);
+  applyLang();
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+})();
+</script>
+</body>
+</html>

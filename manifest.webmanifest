@@ -1,0 +1,14 @@
+{
+  "name": "Velten Scan",
+  "short_name": "Velten",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#006935",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "logo.png", "sizes": "1177x330", "type": "image/png", "purpose": "any" }
+  ]
+}
