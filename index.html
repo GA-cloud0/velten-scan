@@ -92,6 +92,36 @@
     border:3px solid rgba(255,255,255,.35); border-top-color:#fff;
     animation:spin .8s linear infinite; vertical-align:-4px; }
   button.b[disabled] { opacity:.6; }
+
+  .big.versendet { border-color:var(--rot); color:var(--rot); background:#fdecee; }
+  .banner { margin-top:8px; padding:11px 10px; border-radius:9px; text-align:center;
+    font-size:17px; font-weight:800; background:var(--rot); color:#fff; word-break:break-word; }
+  .banner.teil { background:var(--warn); }
+  .banner:empty { display:none; }
+  .row.raus { opacity:.55; }
+
+  .vk { padding:11px 10px; background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; margin-top:8px; }
+  .vk-kopf { display:flex; align-items:baseline; gap:7px; }
+  .vk-kopf .pf { color:var(--dim); font-size:13px; width:12px; }
+  .vk-kopf .m { font-family:ui-monospace,Menlo,monospace; font-weight:700; }
+  .vk-kopf .zahl { margin-left:auto; font-weight:800; font-size:17px; }
+  .vk.fertig .vk-kopf .zahl { color:var(--gruen); }
+  .vk .s { color:var(--dim); font-size:13px; margin:1px 0 0 19px; word-break:break-word; }
+  .balken { display:flex; height:8px; border-radius:99px; background:var(--line);
+    overflow:hidden; margin-top:8px; }
+  .balken i { display:block; height:100%; }
+  .balken .raus { background:var(--gruen); }
+  .balken .geb { background:var(--hell); }
+  .fil { margin-top:10px; border-top:1px solid var(--line); padding-top:2px; }
+  .fz { display:flex; align-items:center; flex-wrap:wrap; gap:5px; padding:7px 0;
+    font-size:15px; border-bottom:1px solid var(--line); }
+  .fz:last-child { border-bottom:0; }
+  .fz .g { flex:1; min-width:40%; word-break:break-word; }
+  .fz .zahl { font-weight:700; color:var(--dim); }
+  .fz.offen .zahl { color:var(--warn); }
+  .chip { font-size:12px; font-weight:700; padding:2px 7px; border-radius:99px;
+    background:#fff2dc; color:var(--warn); border:1px solid #f0d7a8; }
 </style>
 </head>
 <body>
@@ -129,23 +159,26 @@
   <nav>
     <button data-mode="bind" class="sel" data-t="bind">Binden</button>
     <button data-mode="ship" data-t="ship">Ausgang</button>
-    <button data-mode="info" data-t="info">Suchen</button>
+    <button data-mode="stand" data-t="stand">Stand</button>
   </nav>
 
   <main>
-    <div class="cam hide" id="cam"><video id="video" playsinline muted autoplay></video><div class="fr"></div></div>
-    <div class="two">
-      <button id="btnCam" class="b" data-t="cam">Kamera</button>
-      <button id="btnShot" class="b g" data-t="photo">Foto</button>
+    <div id="scanBox">
+      <div class="cam hide" id="cam"><video id="video" playsinline muted autoplay></video><div class="fr"></div></div>
+      <div class="two">
+        <button id="btnCam" class="b" data-t="cam">Kamera</button>
+        <button id="btnShot" class="b g" data-t="photo">Foto</button>
+      </div>
+      <input id="photo" type="file" accept="image/*" capture="environment" class="hide">
+      <form id="manForm" autocomplete="off"><input id="manual" type="text"></form>
+      <div id="manHint" class="hint"></div>
     </div>
-    <input id="photo" type="file" accept="image/*" capture="environment" class="hide">
-    <form id="manForm" autocomplete="off"><input id="manual" type="text"></form>
-    <div id="manHint" class="hint"></div>
 
     <section id="mBind">
       <div id="palletBox" class="hide">
         <div class="big" id="storeBig">&ndash;</div>
         <div class="sscc" id="ssccTxt"></div>
+        <div id="palBanner" class="banner"></div>
         <div id="lidList"></div>
         <div style="height:8px"></div>
         <div class="two">
@@ -155,8 +188,20 @@
       </div>
     </section>
 
-    <section id="mShip" class="hide"><div id="vList"></div></section>
-    <section id="mInfo" class="hide"><div id="infoOut"></div></section>
+    <section id="mShip" class="hide">
+      <div id="shipBox" class="hide">
+        <div class="big" id="shipStore">&ndash;</div>
+        <div class="sscc" id="shipSscc"></div>
+        <div id="shipBanner" class="banner"></div>
+        <div id="shipList"></div>
+        <div style="height:10px"></div>
+        <div class="two">
+          <button id="btnShipNo" class="b g" data-t="cancel">Abbrechen</button>
+          <button id="btnShipOk" class="b" data-t="confirmShip">Ausgang buchen</button>
+        </div>
+      </div>
+    </section>
+    <section id="mStand" class="hide"><div id="vList"></div></section>
 
     <div style="height:14px"></div>
     <button id="btnSync" class="b g w" data-t="reload">Laden</button>
@@ -169,30 +214,38 @@
 'use strict';
 
 var TXT = {
-  de: { title:'Velten Scan', bind:'Binden', ship:'Ausgang', info:'Suchen',
+  de: { title:'Velten Scan', bind:'Binden', ship:'Ausgang', stand:'Stand',
         cam:'Kamera', camOff:'Stopp', photo:'Foto', done:'Fertig', drop:'Verwerfen',
         reload:'Laden', save:'OK', code:'Code', unpair:'Abmelden',
         ready:'Bereit', newPal:'Neue Palette', saved:'Gespeichert',
         already:'Schon drauf', unknown:'Unbekannt', needCode:'Erst Barcode',
-        otherStore:'Andere Filiale', boundElse:'Klebt schon woanders', shipped:'Ausgang',
+        otherStore:'Andere Filiale', boundElse:'Klebt schon woanders',
         check:'Pruefziffer falsch', offline:'Offline', noRead:'Nichts erkannt',
         noCam:'Keine Kamera', reading:'…', dropped:'Verworfen', notFound:'Nicht gefunden',
-        askShip:'Ganze Verteilung ausliefern?', askOpen:'Nicht gebundene Aufkleber. Trotzdem?',
         needPair:'Anmelden', codeBad:'Code falsch', locked:'Gesperrt', readonly:'Nur Lesen',
         oneShot:'Kamera nach Scan aus', unbound:'Geloest',
-        toomany:'Zu viele Geraete an diesem Zugang' },
-  zh: { title:'Velten 扫描', bind:'绑定', ship:'出货', info:'查询',
+        toomany:'Zu viele Geraete an diesem Zugang',
+        palShipped:'Schon ausgeliefert', palPartial:'Teilweise ausgeliefert',
+        emptyPal:'Nichts gebunden', confirmShip:'Ausgang buchen', cancel:'Abbrechen',
+        shipDone:'Ausgang gebucht', queued:'Wird gesendet',
+        shipBusy:'Erst buchen oder abbrechen', pending:'Noch nicht gesendet',
+        shipHeld:'Ausgang angehalten - neu bestaetigen', voided:'Entwertet' },
+  zh: { title:'Velten 扫描', bind:'绑定', ship:'出货', stand:'进度',
         cam:'摄像头', camOff:'停止', photo:'拍照', done:'完成', drop:'取消',
         reload:'刷新', save:'确定', code:'配对码', unpair:'解除',
         ready:'就绪', newPal:'新板', saved:'已保存',
         already:'已在本板', unknown:'未知编号', needCode:'请先扫条码',
-        otherStore:'门店不符', boundElse:'已绑其他板', shipped:'已出货',
+        otherStore:'门店不符', boundElse:'已绑其他板',
         check:'校验位错误', offline:'离线', noRead:'未识别',
         noCam:'无摄像头', reading:'…', dropped:'已取消', notFound:'未找到',
-        askShip:'整次分货出货？', askOpen:'尚有未绑定贴纸，仍要出货？',
         needPair:'请先配对', codeBad:'配对码错误', locked:'已锁定', readonly:'只读',
         oneShot:'扫描后关闭摄像头', unbound:'已解绑',
-        toomany:'该通道设备数已达上限' }
+        toomany:'该通道设备数已达上限',
+        palShipped:'该板已出货', palPartial:'该板部分已出货',
+        emptyPal:'板上无贴纸', confirmShip:'确认出货', cancel:'取消',
+        shipDone:'出货完成', queued:'待发送',
+        shipBusy:'请先确认或取消', pending:'尚未上传',
+        shipHeld:'出货已暂停，请重新确认', voided:'已作废' }
 };
 var lang = 'de';
 function t(k) { return (TXT[lang] && TXT[lang][k]) || TXT.de[k] || k; }
@@ -329,6 +382,9 @@ function applyLang() {
   $('meRole').textContent = cfg.rw ? '' : t('readonly');
 
   if (pairBusy) $('cfgPair').innerHTML = SPINNER;
+
+  palRender();
+  ausRender();
   paint();
   renderVerteilungen();
 }
@@ -364,6 +420,16 @@ function classify(x) {
   return { kind:null, value:s };
 }
 
+function mitFrist(p, ms) {
+  return new Promise(function (ok, fail) {
+    var uhr = setTimeout(function () { fail(new Error('frist')); }, ms);
+    p.then(function (v) { clearTimeout(uhr); ok(v); },
+           function (e) { clearTimeout(uhr); fail(e); });
+  });
+}
+
+var MELDUNG_FUER = { already_shipped:'palShipped', empty:'emptyPal', readonly:'readonly' };
+
 function apiGet(action, params) {
   var p = new URLSearchParams(Object.assign({ action:action, tok:cfg.tok }, params || {}));
   return fetch(cfg.api + (cfg.api.indexOf('?') < 0 ? '?' : '&') + p.toString())
@@ -385,11 +451,79 @@ function guard(d) {
   return d;
 }
 
-var queue = ls(K.queue) || [], flushing = false, abgelehnt = false;
-var FLUSH_VERSUCHE = 3, versuche = 0;
+var queue = ls(K.queue) || [], flushing = false, flushLauf = null, abgelehnt = false;
+
+var fertigeAuftraege = [], fertigNr = 0;
+function merkeFertig(job) {
+  fertigeAuftraege.push({ nr:++fertigNr, job:job });
+  if (fertigeAuftraege.length > 50) fertigeAuftraege.shift();
+}
+var FLUSH_VERSUCHE = 3, FLUSH_FRIST = 30000, versuche = 0;
 function warte(ms) { return new Promise(function (fertig) { setTimeout(fertig, ms); }); }
 var cache = ls(K.cache) || { at:0, verteilungen:[], labels:[] };
 var byLid = {};
+
+function aufPalette(sscc) {
+  return (cache.labels || []).filter(function (l) {
+    return splitMulti(l.sscc).some(function (x) { return ssccEq(x, sscc); });
+  }).map(function (l) { return l.lid; });
+}
+function cacheBinden(sscc, lids) {
+  lids.forEach(function (lid) {
+    var c = byLid[lid];
+    if (!c) return;
+    var rest = ssccOhne(c.sscc, sscc);
+    rest.push(sscc);
+    c.sscc = rest.join('|');
+    if (String(c.status) !== '已出货') c.status = '已绑定';
+  });
+}
+function cacheLoesen(sscc, lids) {
+  lids.forEach(function (lid) {
+    var c = byLid[lid];
+
+    if (!c || String(c.status) === '已出货') return;
+    var rest = ssccOhne(c.sscc, sscc);
+    c.sscc = rest.join('|');
+    c.status = rest.length ? '已绑定' : '待绑定';
+  });
+}
+function cacheVersendet(sscc) {
+  (cache.labels || []).forEach(function (l) {
+    if (splitMulti(l.sscc).some(function (x) { return ssccEq(x, sscc); })) l.status = '已出货';
+  });
+}
+function cacheAnwenden(job) {
+  var b = job.body || {};
+  if (!b.sscc) return;
+  if (job.action === 'bindPallet') cacheBinden(b.sscc, b.lids || []);
+  else if (job.action === 'unbind') cacheLoesen(b.sscc, b.lids && b.lids.length ? b.lids : aufPalette(b.sscc));
+  else if (job.action === 'shipPallet') cacheVersendet(b.sscc);
+}
+
+function ausstehend(sscc) {
+  return queue.filter(function (j) { return j.body && j.body.sscc && ssccEq(j.body.sscc, sscc); });
+}
+function ausstehendRaus(sscc) {
+  return ausstehend(sscc).some(function (j) { return j.action === 'shipPallet'; });
+}
+
+function mitAusstehenden(lids, sscc) {
+  var ergebnis = lids.slice();
+  ausstehend(sscc).forEach(function (j) {
+    var liste = j.body.lids || [];
+    if (j.action === 'bindPallet') {
+      liste.forEach(function (l) { if (ergebnis.indexOf(l) < 0) ergebnis.push(l); });
+    } else if (j.action === 'unbind') {
+      var weg = liste.length ? liste : ergebnis.slice();
+      ergebnis = ergebnis.filter(function (l) {
+        return weg.indexOf(l) < 0 || (byLid[l] && String(byLid[l].status) === '已出货');
+      });
+    }
+  });
+  return ergebnis;
+}
+
 function reindex() {
   byLid = {};
   (cache.labels || []).forEach(function (l) { byLid[l.lid] = l; });
@@ -405,59 +539,131 @@ function setNet(on) {
   el.textContent = on ? '●' : '○';
   el.className = 'tag ' + (on ? 'on' : 'off');
 }
-function queueShow() { setNet(navigator.onLine !== false); }
+function queueShow() {
+  setNet(navigator.onLine !== false);
+
+  if (aus && aus.mitOffen && !aus.pruefen && !aus.sende && !ausstehend(aus.sscc).length) {
+    ausPruefen(aus, true);
+  }
+  ausRender();
+}
+
 function sync() {
+  var ab = fertigNr;
   return apiGet('sync').then(function (d) {
     if (!d.ok) throw new Error(d.error);
     cache = { at:Date.now(), verteilungen:d.verteilungen || [], labels:d.labels || [] };
+    byLid = {};
+    cache.labels.forEach(function (l) { byLid[l.lid] = l; });
+
+    fertigeAuftraege.forEach(function (e) { if (e.nr > ab) cacheAnwenden(e.job); });
+    queue.forEach(cacheAnwenden);
     ls(K.cache, cache); reindex(); setNet(true);
-  }).catch(function () { setNet(false); });
+    return true;
+  }).catch(function () { setNet(false); return false; });
 }
 
 function enqueue(job) { queue.push(job); ls(K.queue, queue); queueShow(); flush(); }
+
 function flush() {
-  if (flushing || !queue.length) return Promise.resolve();
+  if (flushing) return flushLauf;
+
+  if (!queue.length || !cfg.tok) return Promise.resolve();
   flushing = true;
-  var job = queue[0];
-  return apiPost(job.action, job.body).then(function (d) {
+  flushLauf = flushSchritt().then(function (grund) {
     flushing = false;
-    if (!d) { setNet(false); return; }
+
+    if (grund === 'leer' && queue.length) return flush();
+  }, function () { flushing = false; });
+  return flushLauf;
+}
+
+function flushSchritt() {
+  if (!queue.length) {
+    if (!abgelehnt) return Promise.resolve('leer');
+    abgelehnt = false;
+    return sync().then(function () { return 'leer'; });
+  }
+  var job = queue[0];
+  return mitFrist(apiPost(job.action, job.body), FLUSH_FRIST).then(function (d) {
+    if (!d) { setNet(false); return 'netz'; }
+
+    if (!d.ok && d.code === 'auth') return 'auth';
 
     if (!d.ok && !d.code && versuche < FLUSH_VERSUCHE) {
       versuche++;
-      return warte(versuche * 2000).then(flush);
+      return warte(versuche * 2000).then(flushSchritt);
     }
     versuche = 0;
 
-    queue.shift(); ls(K.queue, queue); setNet(true); queueShow();
+    queue.shift(); ls(K.queue, queue); setNet(true);
+    var wo = job.body && job.body.sscc ? String(job.body.sscc).slice(-6) : '';
 
-    if (!d.ok && d.code !== 'auth') {
+    if (!d.ok) {
       abgelehnt = true;
-      if (d.code === 'readonly') flashT('bad', 'readonly');
-      else flash('bad', d.error || d.code || '');
+      if (MELDUNG_FUER[d.code]) flashT('bad', MELDUNG_FUER[d.code], wo);
+      else flash('bad', d.error || d.code || '', wo);
     }
 
-    if (d.ok && d.results && d.results.some(function (r) { return !r.ok; })) abgelehnt = true;
+    var nein = d.ok && d.results ? d.results.filter(function (r) { return !r.ok; }) : [];
+    if (nein.length) {
+      abgelehnt = true;
+      flashT('bad', nein[0].code === 'bound_elsewhere' ? 'boundElse' :
+                    nein[0].code === 'void' ? 'voided' : 'unknown',
+             nein.map(function (r) { return r.lid; }).join(' '));
+      var vorher = queue.length;
+      queue = queue.filter(function (j) {
+        return !(j.action === 'shipPallet' && j.body && ssccEq(j.body.sscc, job.body.sscc));
+      });
+      if (queue.length !== vorher) { ls(K.queue, queue); flashT('bad', 'shipHeld', wo); }
+    }
 
-    if (queue.length) return flush();
-    if (abgelehnt) { abgelehnt = false; return sync(); }
-  }).catch(function () { flushing = false; setNet(false); });
+    if (d.ok && d.skipped && d.skipped.length) {
+      abgelehnt = true;
+      flashT('bad', 'palShipped', d.skipped.length + '');
+    }
+    if (d.ok) {
+
+      merkeFertig(nein.length ? { action:job.action, body:{ sscc:job.body.sscc,
+        lids:d.results.filter(function (r) { return r.ok; }).map(function (r) { return r.lid; }) } } : job);
+
+      if (job.action === 'shipPallet') flashT('ok', 'shipDone', wo);
+    }
+    queueShow();
+    return flushSchritt();
+  }, function () {
+
+    setNet(false);
+    return 'netz';
+  });
 }
 window.addEventListener('online', function () { setNet(true); flush(); });
 window.addEventListener('offline', function () { setNet(false); });
 
 var mode = 'bind';
+
+function modusSetzen(neu) {
+
+  if (neu !== 'bind' && pal) palCommit(true);
+  mode = neu;
+  scanFreigeben();
+  Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (x) {
+    x.classList.toggle('sel', x.dataset.mode === neu);
+  });
+  show($('mBind'), mode === 'bind');
+  show($('mShip'), mode === 'ship');
+  show($('mStand'), mode === 'stand');
+
+  show($('scanBox'), mode !== 'stand');
+  if (mode === 'stand' && stream) stopCam();
+
+  if (mode !== 'ship' && aus && !aus.sende) { aus = null; ausRender(); }
+  flashT('', mode);
+  if (mode === 'stand') sync();
+}
+
 Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
-  b.onclick = function () {
-    Array.prototype.forEach.call(document.querySelectorAll('nav button'),
-      function (x) { x.classList.remove('sel'); });
-    b.classList.add('sel');
-    mode = b.dataset.mode;
-    show($('mBind'), mode === 'bind');
-    show($('mShip'), mode === 'ship');
-    show($('mInfo'), mode === 'info');
-    flashT('', mode);
-  };
+  b.onclick = function () { modusSetzen(b.dataset.mode); };
 });
 
 var pal = null;
@@ -467,30 +673,116 @@ function palVorhanden(sscc) {
     return splitMulti(l.sscc).some(function (x) { return ssccEq(x, sscc); });
   }).map(function (l) {
     return { lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid,
-             alt:true, shipped:String(l.status) === '已出货' };
+             alt:true, shipped:rausHier(l), gesperrt:String(l.status) === '已出货' };
   });
+}
+
+function rausHier(l) {
+  return String(l.status) === '已出货' && splitMulti(l.sscc).length <= 1;
+}
+
+function palZustand(lids) {
+  if (!lids.length) return '';
+  var raus = lids.filter(function (l) { return l.shipped; }).length;
+  return raus === lids.length ? 'shipped' : raus ? 'partial' : '';
+}
+function zustandAus(status) {
+  var st = String(status);
+  return st === '已出货' ? 'shipped' : st === '部分出货' ? 'partial' : '';
+}
+
+function zeileAus(lid) {
+  var l = byLid[lid];
+  return l ? { lid:lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid,
+               alt:true, shipped:rausHier(l), gesperrt:String(l.status) === '已出货' }
+           : { lid:lid, store:'', seq:'', total:'', vid:'', alt:true, shipped:false, gesperrt:false };
+}
+
+function filialenVon(lids) {
+  var st = {};
+  lids.forEach(function (l) { if (l.store) st[l.store] = 1; });
+  return Object.keys(st);
+}
+
+function zeitWer(p) {
+  if (!p) return '';
+  var teile = [], d = p.shippedAt ? new Date(p.shippedAt) : null;
+  if (d && !isNaN(d.getTime())) {
+    var zz = function (x) { return ('0' + x).slice(-2); };
+    teile.push(zz(d.getDate()) + '.' + zz(d.getMonth() + 1) + ' ' +
+               zz(d.getHours()) + ':' + zz(d.getMinutes()));
+  }
+  if (p.shippedBy) teile.push(String(p.shippedBy));
+  return teile.join(' · ');
+}
+
+function palPruefen(sscc) {
+
+  var mein = pal;
+  return mitFrist(apiGet('lookup', { q:sscc }), 10000).then(function (d) {
+    if (!d || !d.ok || !d.found || !d.pallet) return;
+
+    var neu = ausstehendRaus(sscc) ? 'shipped' : zustandAus(d.pallet.status);
+    if (pal !== mein) {
+
+      if (zustandAus(d.pallet.status) === 'shipped' && mode === 'bind' &&
+          ausstehend(sscc).some(function (j) { return j.action === 'bindPallet'; })) {
+        flashT('bad', 'palShipped', String(sscc).slice(-6));
+      }
+      return;
+    }
+    pal.info = d.pallet;
+    if (neu === 'shipped' && pal.zustand !== 'shipped') {
+
+      var verworfen = pal.lids.filter(function (l) { return !l.alt; }).length;
+      pal.lids = mitAusstehenden(d.pallet.lids || [], sscc).map(zeileAus);
+      pal.weg = [];
+      pal.zustand = 'shipped';
+      palRender();
+      if (mode === 'bind') flashT('bad', 'palShipped', verworfen ? '\u2212' + verworfen : '');
+      return;
+    }
+    var vorher = pal.zustand;
+    pal.zustand = neu;
+    palRender();
+    if (mode === 'bind' && vorher !== neu) {
+      if (neu === 'partial') flashT('warn', 'newPal', '', 'palPartial');
+
+      else if (vorher === 'shipped') flashT('ok', 'newPal', String(sscc).slice(-6));
+    }
+
+    if (vorher === 'shipped' && neu !== 'shipped') scanFreigeben(sscc);
+  }).catch(function () {});
 }
 
 function palRender() {
   show($('palletBox'), !!pal);
   if (!pal) return;
-  var st = {};
-  pal.lids.forEach(function (l) { st[l.store] = 1; });
-  var names = Object.keys(st);
-  $('storeBig').textContent = names.length ? names.join(' / ') : '–';
+  var raus = pal.zustand === 'shipped';
+  var namen = filialenVon(pal.lids);
+  if (!namen.length && pal.info && pal.info.store) namen = splitMulti(pal.info.store);
+  $('storeBig').textContent = namen.length ? namen.join(' / ') : '–';
+  $('storeBig').className = 'big' + (raus ? ' versendet' : '');
   $('ssccTxt').textContent = pal.sscc.replace(/(\d{4})(?=\d)/g, '$1 ');
+  var wann = zeitWer(pal.info);
+  $('palBanner').className = 'banner' + (pal.zustand === 'partial' ? ' teil' : '');
+  $('palBanner').textContent = raus ? t('palShipped') + (wann ? ' · ' + wann : '')
+    : pal.zustand === 'partial' ? t('palPartial') : '';
   $('lidList').innerHTML = pal.lids.map(function (l, i) {
-    return '<div class="row' + (l.alt ? ' alt' : '') + '"><span class="g"><span class="m">' +
-      esc(l.lid) + '</span>' +
-      '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) + '</div></span>' +
-      '<span class="x" data-rm="' + i + '">&times;</span></div>';
+
+    var fest = raus || (l.alt && l.gesperrt);
+    return '<div class="row' + (l.alt ? ' alt' : '') + (l.gesperrt ? ' raus' : '') + '">' +
+      '<span class="g"><span class="m">' + esc(l.lid) + '</span>' +
+      (l.store ? '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) + '</div>' : '') +
+      '</span>' + (fest ? '' : '<span class="x" data-rm="' + i + '">&times;</span>') + '</div>';
   }).join('');
   Array.prototype.forEach.call($('lidList').querySelectorAll('[data-rm]'), function (x) {
     x.onclick = function () {
       var i = Number(x.dataset.rm), l = pal.lids[i];
       if (!l) return;
 
-      if (l.alt && l.shipped) { flashT('bad', 'shipped', l.lid); return; }
+      if (pal.zustand === 'shipped' || (l.alt && l.gesperrt)) { flashT('bad', 'palShipped', l.lid); return; }
+      if (cfg.rw === false) { flashT('bad', 'readonly'); return; }
       pal.lids.splice(i, 1);
 
       if (l.alt) pal.weg.push(l.lid);
@@ -508,24 +800,11 @@ function palCommit(silent) {
 
   if (weg.length) {
     enqueue({ action:'unbind', body:{ sscc:pal.sscc, lids:weg } });
-    weg.forEach(function (lid) {
-      var c = byLid[lid];
-      if (!c) return;
-      var rest = ssccOhne(c.sscc, pal.sscc);
-      c.sscc = rest.join('|');
-      if (String(c.status) !== '已出货') c.status = rest.length ? '已绑定' : '待绑定';
-    });
+    cacheLoesen(pal.sscc, weg);
   }
   if (neu.length) {
     enqueue({ action:'bindPallet', body:{ sscc:pal.sscc, lids:neu } });
-    neu.forEach(function (lid) {
-      var c = byLid[lid];
-      if (!c) return;
-      var rest = ssccOhne(c.sscc, pal.sscc);
-      rest.push(pal.sscc);
-      c.sscc = rest.join('|');
-      if (String(c.status) !== '已出货') c.status = '已绑定';
-    });
+    cacheBinden(pal.sscc, neu);
   }
   ls(K.cache, cache); reindex();
   if (!silent) {
@@ -536,15 +815,26 @@ function palCommit(silent) {
 }
 
 var lastText = '', lastAt = 0;
+
+function scanFreigeben(ausser) {
+  if (!lastText) return;
+  if (ausser) {
+    var c = classify(lastText);
+    if (c.kind === 'sscc' && ssccEq(c.value, ausser)) return;
+  }
+  lastText = '';
+}
+
 function onScan(text) {
+  if (mode === 'stand') return;
   var now = Date.now();
-  if (text === lastText && now - lastAt < 2500) return;
+
+  if (text === lastText && now - lastAt < 2500) { lastAt = now; return; }
   lastText = text; lastAt = now;
   var c = classify(text);
   if (!c.kind) { flashT('bad', 'noRead'); return; }
 
   if (cfg.oneShot && stream) stopCam();
-  if (mode === 'info') return doInfo(c);
   if (mode === 'ship') return doShip(c);
   return doBind(c);
 }
@@ -553,13 +843,23 @@ function doBind(c) {
   if (c.kind === 'sscc') {
     if (pal && ssccEq(pal.sscc, c.value)) { flashT('warn', 'already'); return; }
     if (pal) palCommit(true);
-    pal = { sscc:c.value, checkOk:c.checkOk, lids:palVorhanden(c.value), weg:[] };
+    var vorhanden = palVorhanden(c.value);
+
+    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, weg:[],
+            zustand:ausstehendRaus(c.value) ? 'shipped' : palZustand(vorhanden), info:null };
     palRender();
-    if (c.checkOk) flashT('ok', 'newPal', c.value.slice(-6));
+    if (pal.zustand === 'shipped') flashT('bad', 'palShipped');
+    else if (pal.zustand === 'partial') flashT('warn', 'newPal', '', 'palPartial');
+    else if (c.checkOk) flashT('ok', 'newPal', c.value.slice(-6));
     else flashT('warn', 'newPal', '', 'check');
+    palPruefen(pal.sscc);
     return;
   }
   if (!pal) { flashT('bad', 'needCode'); return; }
+
+  if (cfg.rw === false) { flashT('bad', 'readonly'); return; }
+
+  if (pal.zustand === 'shipped') { flashT('bad', 'palShipped'); return; }
   var l = byLid[c.value];
   if (!l) { flashT('bad', 'unknown', c.value); return; }
 
@@ -567,7 +867,7 @@ function doBind(c) {
   if (wi >= 0) {
     pal.weg.splice(wi, 1);
     pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid,
-                    alt:true, shipped:String(l.status) === '已出货' });
+                    alt:true, shipped:rausHier(l), gesperrt:String(l.status) === '已出货' });
     palRender();
     flash('ok', l.store, l.seq + '/' + l.total);
     return;
@@ -583,53 +883,191 @@ function doBind(c) {
   else flash('ok', l.store, l.seq + '/' + l.total);
 }
 
+var aus = null;
+
 function doShip(c) {
   if (c.kind !== 'sscc') { flashT('bad', 'needCode'); return; }
-  enqueue({ action:'shipPallet', body:{ sscc:c.value } });
-  flashT('ok', 'shipped', c.value.slice(-6));
-}
 
-function doInfo(c) {
-  var out = $('infoOut');
-  var l = c.kind === 'lid' ? byLid[c.value] : null;
-  if (l) {
-    out.innerHTML = '<div class="row"><span class="g"><span class="m">' + esc(l.lid) + '</span>' +
-      '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) + ' · ' +
-      esc(l.vid) + ' · ' + esc(l.status) + '</div></span></div>';
-    flash('ok', l.store, l.seq + '/' + l.total);
+  if (aus && ssccEq(aus.sscc, c.value)) return;
+
+  if (aus && (aus.pruefen || aus.sende || ausBereit(aus))) {
+    flashT('warn', 'shipBusy', aus.sscc.slice(-6));
     return;
   }
-  flashT('', 'reading');
-  apiGet('lookup', { q:c.value }).then(function (d) {
-    if (!d.ok || !d.found) { out.innerHTML = ''; flashT('warn', 'notFound'); return; }
-    var p = d.pallet || d.label;
-    out.innerHTML = '<div class="row"><span class="g">' + esc(p.store || '') +
-      '<div class="s">' + esc(p.status || '') + '</div></span></div>';
-    flash('ok', p.store || '', p.status || '');
-  }).catch(function () { flashT('bad', 'offline'); });
+  var lids = palVorhanden(c.value);
+  var a = aus = { sscc:c.value, checkOk:c.checkOk, lids:lids,
+                  zustand:ausstehendRaus(c.value) ? 'shipped' : palZustand(lids),
+                  info:null, pruefen:true, sende:false, offline:false, unbekannt:false };
+  ausRender();
+  if (c.checkOk) flashT('', 'ship', c.value.slice(-6));
+  else flashT('warn', 'ship', '', 'check');
+  return ausPruefen(a);
+}
+
+function ausPruefen(a, nochmal) {
+  var vorZustand = a.zustand, vorAnzahl = a.lids.length;
+  a.pruefen = true; a.offline = false; a.unbekannt = false; a.mitOffen = false;
+  ausRender();
+
+  return mitFrist(flush(), 8000).catch(function () {}).then(function () {
+    return mitFrist(apiGet('lookup', { q:a.sscc }), 10000);
+  }).then(function (d) {
+    if (aus !== a) return;
+    if (!d || !d.ok) { a.offline = true; return; }
+    if (!d.found || !d.pallet) {
+
+      if (!ausstehend(a.sscc).length) { a.unbekannt = true; a.lids = []; }
+      else a.mitOffen = true;
+      return;
+    }
+
+    a.info = d.pallet;
+    a.lids = mitAusstehenden(d.pallet.lids || [], a.sscc).map(zeileAus);
+    a.zustand = ausstehendRaus(a.sscc) ? 'shipped' : zustandAus(d.pallet.status);
+
+    a.mitOffen = ausstehend(a.sscc).length > 0;
+  }, function () {
+    if (aus === a) a.offline = true;
+  }).then(function () {
+    if (aus !== a) return;
+    a.pruefen = false;
+    ausRender();
+    if (nochmal && !a.unbekannt && a.zustand === vorZustand && a.lids.length === vorAnzahl) return;
+    if (a.unbekannt) flashT('bad', 'notFound');
+    else if (a.zustand === 'shipped') flashT('bad', 'palShipped');
+    else if (!a.lids.length) flashT('bad', a.offline ? 'offline' : 'emptyPal');
+  });
+}
+
+function ausBereit(a) {
+  return !!a && !a.pruefen && !a.sende && !a.unbekannt && cfg.rw !== false &&
+         a.zustand !== 'shipped' && a.lids.length > 0;
+}
+
+function ausRender() {
+  show($('shipBox'), !!aus);
+  if (!aus) return;
+  var a = aus, raus = a.zustand === 'shipped';
+  var namen = filialenVon(a.lids);
+  if (!namen.length && a.info && a.info.store) namen = splitMulti(a.info.store);
+  $('shipStore').textContent = namen.length ? namen.join(' / ') : '–';
+  $('shipStore').className = 'big' + (raus ? ' versendet' : '');
+  $('shipSscc').textContent = a.sscc.replace(/(\d{4})(?=\d)/g, '$1 ');
+
+  var text = '', teil = false, wann = zeitWer(a.info), offen = ausstehend(a.sscc).length;
+  if (a.unbekannt) text = t('notFound');
+  else if (raus) text = t('palShipped') + (wann ? ' · ' + wann : '');
+  else if (!a.pruefen && !a.lids.length) { text = t(a.offline ? 'offline' : 'emptyPal'); teil = a.offline; }
+  else if (a.zustand === 'partial') { text = t('palPartial'); teil = true; }
+  else if (offen) { text = t('pending'); teil = true; }
+  else if (a.offline) { text = t('offline'); teil = true; }
+
+  else if (cfg.rw === false) { text = t('readonly'); teil = true; }
+  $('shipBanner').className = 'banner' + (teil ? ' teil' : '');
+  $('shipBanner').textContent = text;
+
+  $('shipList').innerHTML = a.lids.map(function (l) {
+    return '<div class="row' + (l.shipped ? ' raus' : '') + '"><span class="g">' +
+      '<span class="m">' + esc(l.lid) + '</span>' +
+      (l.store ? '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) + '</div>' : '') +
+      '</span></div>';
+  }).join('');
+
+  var ok = $('btnShipOk');
+  show(ok, !a.unbekannt && !raus && cfg.rw !== false && (a.pruefen || a.lids.length > 0));
+  ok.disabled = !ausBereit(a);
+  ok.innerHTML = (a.pruefen || a.sende) ? SPINNER : esc(t('confirmShip'));
+}
+
+function ausBuchen() {
+  var a = aus;
+  if (!ausBereit(a)) return Promise.resolve();
+  var wo = a.sscc.slice(-6);
+  function erledigt(art, key) {
+    cacheVersendet(a.sscc);
+    ls(K.cache, cache); reindex();
+    scanFreigeben(a.sscc);
+    if (aus === a) { aus = null; ausRender(); }
+
+    flashT(art, key, wo + ' · ' + a.lids.length);
+  }
+
+  if (ausstehend(a.sscc).length) {
+    enqueue({ action:'shipPallet', body:{ sscc:a.sscc } });
+    erledigt('warn', 'queued');
+    return Promise.resolve();
+  }
+  a.sende = true; ausRender();
+
+  return mitFrist(apiPost('shipPallet', { sscc:a.sscc }), 15000).then(function (d) {
+    if (d && d.ok) { erledigt('ok', 'shipDone'); sync(); return; }
+    a.sende = false;
+    if (aus === a) ausRender();
+    if (d && MELDUNG_FUER[d.code]) flashT('bad', MELDUNG_FUER[d.code], wo);
+    else if (!d || d.code !== 'auth') flash('bad', (d && (d.error || d.code)) || '', wo);
+  }, function () {
+
+    enqueue({ action:'shipPallet', body:{ sscc:a.sscc } });
+    erledigt('warn', 'queued');
+  });
+}
+
+function ausAbbrechen() {
+  if (!aus || aus.sende) return;
+  scanFreigeben(aus.sscc);
+  aus = null; ausRender(); flashT('', 'dropped');
+}
+
+var standAuf = {};
+
+function prozent(a, n) { return n ? Math.round(a / n * 1000) / 10 : 0; }
+
+function filialenHtml(liste) {
+  var f = {};
+  liste.forEach(function (l) { (f[l.store] = f[l.store] || []).push(l); });
+  function offen(l) { return l.status === '待绑定'; }
+  var namen = Object.keys(f).sort(function (a, b) {
+    var oa = f[a].some(offen), ob = f[b].some(offen);
+    if (oa !== ob) return oa ? -1 : 1;
+    return a.localeCompare(b, 'de');
+  });
+  return '<div class="fil">' + namen.map(function (name) {
+    var z = f[name].slice().sort(function (a, b) { return Number(a.seq) - Number(b.seq); });
+    var los = z.filter(offen);
+    return '<div class="fz' + (los.length ? ' offen' : '') + '"><span class="g">' + esc(name) + '</span>' +
+      los.map(function (l) { return '<span class="chip">' + esc(l.seq) + '/' + esc(l.total) + '</span>'; }).join('') +
+      '<span class="zahl">' + (z.length - los.length) + '/' + z.length + '</span></div>';
+  }).join('') + '</div>';
 }
 
 function renderVerteilungen() {
   var el = $('vList');
   if (!el) return;
-  el.innerHTML = (cache.verteilungen || []).map(function (v) {
-    return '<div class="row"><span class="g"><span class="m">' + esc(v.vid) + '</span>' +
-      '<div class="s">' + esc(v.name) + '</div></span>' +
-      '<button class="b" style="flex:0 0 auto;padding:9px 14px" data-ship="' + esc(v.vid) + '">&#9654;</button></div>';
+  var nachV = {};
+  (cache.labels || []).forEach(function (l) { (nachV[l.vid] = nachV[l.vid] || []).push(l); });
+  var vs = (cache.verteilungen || []).slice().sort(function (a, b) {
+    return String(a.vid).localeCompare(String(b.vid));
+  });
+  el.innerHTML = vs.map(function (v) {
+    var liste = nachV[v.vid] || [], n = liste.length, raus = 0, geb = 0;
+    liste.forEach(function (l) {
+      if (l.status === '已出货') raus++;
+      else if (l.status === '已绑定') geb++;
+    });
+    var auf = !!standAuf[v.vid];
+    return '<div class="vk' + (n && raus + geb === n ? ' fertig' : '') + '" data-vid="' + esc(v.vid) + '">' +
+      '<div class="vk-kopf"><span class="pf">' + (auf ? '&#9662;' : '&#9656;') + '</span>' +
+      '<span class="m">' + esc(v.vid) + '</span>' +
+      '<span class="zahl">' + (raus + geb) + '/' + n + '</span></div>' +
+      '<div class="s">' + esc(v.name) + '</div>' +
+      '<div class="balken"><i class="raus" style="width:' + prozent(raus, n) + '%"></i>' +
+      '<i class="geb" style="width:' + prozent(geb, n) + '%"></i></div>' +
+      (auf ? filialenHtml(liste) : '') + '</div>';
   }).join('');
-  Array.prototype.forEach.call(el.querySelectorAll('[data-ship]'), function (b) {
-    b.onclick = function () {
-      var vid = b.dataset.ship;
-      if (!confirm(vid + '\n' + t('askShip'))) return;
-      apiPost('shipVerteilung', { vid:vid }).then(function (d) {
-        if (d.ok) { flashT('ok', 'shipped', vid); sync(); }
-        else if (d.code === 'unbound_labels') {
-          if (confirm(d.unbound.length + '\n' + t('askOpen'))) {
-            apiPost('shipVerteilung', { vid:vid, force:true }).then(function () { sync(); });
-          }
-        } else if (d.code === 'readonly') flashT('bad', 'readonly');
-        else flash('bad', d.error || d.code || '');
-      }).catch(function () { flashT('bad', 'offline'); });
+  Array.prototype.forEach.call(el.querySelectorAll('[data-vid]'), function (k) {
+    k.onclick = function () {
+      standAuf[k.dataset.vid] = !standAuf[k.dataset.vid];
+      renderVerteilungen();
     };
   });
 }
@@ -682,20 +1120,34 @@ function scanLoop(v) {
     timer = setTimeout(tick, r ? 400 : 120);
   })();
 }
+
+var kameraStartet = false;
 function startCam() {
+  if (kameraStartet || stream) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { flashT('bad', 'noCam'); return; }
+  kameraStartet = true;
   beep('ok');
   var v = $('video');
   navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1920 }, height:{ ideal:1080 } }, audio:false
   }).then(function (s) {
+    kameraStartet = false;
+
+    if (mode === 'stand') {
+      s.getTracks().forEach(function (x) { x.stop(); });
+      throw new Error('stand');
+    }
     stream = s; v.srcObject = s;
     show($('cam'), true); $('btnCam').textContent = t('camOff');
     return v.play().catch(function () {});
   }).then(nativeDetector).then(function (d) {
     detector = d;
     scanLoop(v);
-  }).catch(function (e) { stopCam(); flashT('bad', 'noCam', (e && e.name) || ''); });
+  }).catch(function (e) {
+    kameraStartet = false;
+    stopCam();
+    if (mode !== 'stand') flashT('bad', 'noCam', (e && e.name) || '');
+  });
 }
 function stopCam() {
   if (timer) { clearTimeout(timer); timer = 0; }
@@ -740,7 +1192,12 @@ $('manual').oninput = function () {
 
 $('btnCommit').onclick = function () { palCommit(); };
 $('btnDrop').onclick = function () { pal = null; palRender(); flashT('', 'dropped'); };
-$('btnSync').onclick = function () { sync().then(function () { flashT('ok', 'reload'); }); };
+$('btnShipOk').onclick = function () { ausBuchen(); };
+$('btnShipNo').onclick = function () { ausAbbrechen(); };
+
+$('btnSync').onclick = function () {
+  sync().then(function (ok) { if (ok) flashT('ok', 'reload'); else flashT('bad', 'offline'); });
+};
 $('lang').onclick = function () { lang = lang === 'zh' ? 'de' : 'zh'; ls(K.lang, lang); applyLang(); };
 
 function openSetup(on) {
