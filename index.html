@@ -81,6 +81,17 @@
   .row .x { color:var(--dim); font-size:22px; padding:0 6px; }
   .hint { font-size:12px; color:var(--dim); margin-top:4px; min-height:16px; }
   .lbl { font-size:12px; color:var(--dim); margin-top:10px; }
+
+  .chk { display:flex; align-items:center; gap:10px; margin-top:14px; font-size:15px; }
+  .chk input { width:22px; height:22px; margin:0; flex:0 0 auto; accent-color:var(--gruen); }
+
+  .row.alt { border-left:4px solid var(--gruen); }
+
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .spin { display:inline-block; width:19px; height:19px; border-radius:50%;
+    border:3px solid rgba(255,255,255,.35); border-top-color:#fff;
+    animation:spin .8s linear infinite; vertical-align:-4px; }
+  button.b[disabled] { opacity:.6; }
 </style>
 </head>
 <body>
@@ -107,6 +118,7 @@
     <button id="cfgUnpair" class="b g w" data-t="unpair">Abmelden</button>
   </div>
   <div id="cfgMsg" class="hint"></div>
+  <label class="chk"><input id="cfgOneShot" type="checkbox"><span data-t="oneShot">Kamera nach Scan aus</span></label>
   <div class="lbl">URL</div>
   <input id="cfgApi" type="url" autocomplete="off">
 </section>
@@ -166,7 +178,9 @@ var TXT = {
         check:'Pruefziffer falsch', offline:'Offline', noRead:'Nichts erkannt',
         noCam:'Keine Kamera', reading:'…', dropped:'Verworfen', notFound:'Nicht gefunden',
         askShip:'Ganze Verteilung ausliefern?', askOpen:'Nicht gebundene Aufkleber. Trotzdem?',
-        needPair:'Anmelden', codeBad:'Code falsch', locked:'Gesperrt', readonly:'Nur Lesen' },
+        needPair:'Anmelden', codeBad:'Code falsch', locked:'Gesperrt', readonly:'Nur Lesen',
+        oneShot:'Kamera nach Scan aus', unbound:'Geloest',
+        toomany:'Zu viele Geraete an diesem Zugang' },
   zh: { title:'Velten 扫描', bind:'绑定', ship:'出货', info:'查询',
         cam:'摄像头', camOff:'停止', photo:'拍照', done:'完成', drop:'取消',
         reload:'刷新', save:'确定', code:'配对码', unpair:'解除',
@@ -176,7 +190,9 @@ var TXT = {
         check:'校验位错误', offline:'离线', noRead:'未识别',
         noCam:'无摄像头', reading:'…', dropped:'已取消', notFound:'未找到',
         askShip:'整次分货出货？', askOpen:'尚有未绑定贴纸，仍要出货？',
-        needPair:'请先配对', codeBad:'配对码错误', locked:'已锁定', readonly:'只读' }
+        needPair:'请先配对', codeBad:'配对码错误', locked:'已锁定', readonly:'只读',
+        oneShot:'扫描后关闭摄像头', unbound:'已解绑',
+        toomany:'该通道设备数已达上限' }
 };
 var lang = 'de';
 function t(k) { return (TXT[lang] && TXT[lang][k]) || TXT.de[k] || k; }
@@ -190,12 +206,73 @@ function ls(k, v) {
 }
 var cfg = ls(K.cfg) || { api:'', tok:'', who:'', rw:true };
 
+var API_HASH = '3b607140cff05b4574266226409c1e92480be0e951cf060999b800d2a0b2c839';
+var API_RE = /^https:\/\/script\.google\.com\/(?:a\/[A-Za-z0-9.-]+\/)?macros\/s\/([A-Za-z0-9_-]+)\/exec$/;
+
+function sha256ascii(text) {
+  var K = ('428a2f98 71374491 b5c0fbcf e9b5dba5 3956c25b 59f111f1 923f82a4 ab1c5ed5 ' +
+           'd807aa98 12835b01 243185be 550c7dc3 72be5d74 80deb1fe 9bdc06a7 c19bf174 ' +
+           'e49b69c1 efbe4786 0fc19dc6 240ca1cc 2de92c6f 4a7484aa 5cb0a9dc 76f988da ' +
+           '983e5152 a831c66d b00327c8 bf597fc7 c6e00bf3 d5a79147 06ca6351 14292967 ' +
+           '27b70a85 2e1b2138 4d2c6dfc 53380d13 650a7354 766a0abb 81c2c92e 92722c85 ' +
+           'a2bfe8a1 a81a664b c24b8b70 c76c51a3 d192e819 d6990624 f40e3585 106aa070 ' +
+           '19a4c116 1e376c08 2748774c 34b0bcb5 391c0cb3 4ed8aa4a 5b9cca4f 682e6ff3 ' +
+           '748f82ee 78a5636f 84c87814 8cc70208 90befffa a4506ceb bef9a3f7 c67178f2')
+          .split(' ').map(function (x) { return parseInt(x, 16) | 0; });
+  var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+           0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+  function rr(x, k) { return (x >>> k) | (x << (32 - k)); }
+
+  var s = String(text), b = [], i, j;
+  for (i = 0; i < s.length; i++) b.push(s.charCodeAt(i) & 255);
+  var bits = b.length * 8;
+  b.push(0x80);
+  while (b.length % 64 !== 56) b.push(0);
+  b.push(0, 0, 0, 0, (bits >>> 24) & 255, (bits >>> 16) & 255, (bits >>> 8) & 255, bits & 255);
+
+  var w = new Array(64), a, bq, c, d, e, f, g, h, t1, t2, s0, s1;
+  for (i = 0; i < b.length; i += 64) {
+    for (j = 0; j < 16; j++) {
+      w[j] = (b[i + j * 4] << 24) | (b[i + j * 4 + 1] << 16) |
+             (b[i + j * 4 + 2] << 8) | b[i + j * 4 + 3];
+    }
+    for (j = 16; j < 64; j++) {
+      s0 = rr(w[j - 15], 7) ^ rr(w[j - 15], 18) ^ (w[j - 15] >>> 3);
+      s1 = rr(w[j - 2], 17) ^ rr(w[j - 2], 19) ^ (w[j - 2] >>> 10);
+      w[j] = (((w[j - 16] + s0) | 0) + ((w[j - 7] + s1) | 0)) | 0;
+    }
+    a = H[0]; bq = H[1]; c = H[2]; d = H[3];
+    e = H[4]; f = H[5]; g = H[6]; h = H[7];
+    for (j = 0; j < 64; j++) {
+      t1 = (((h + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25))) | 0) +
+            ((((e & f) ^ (~e & g)) + ((K[j] + w[j]) | 0)) | 0)) | 0;
+      t2 = ((rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) +
+            ((a & bq) ^ (a & c) ^ (bq & c))) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0;
+      d = c; c = bq; bq = a; a = (t1 + t2) | 0;
+    }
+    H[0] = (H[0] + a) | 0; H[1] = (H[1] + bq) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+    H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+  }
+  var aus = '';
+  for (i = 0; i < 8; i++) aus += ('0000000' + (H[i] >>> 0).toString(16)).slice(-8);
+  return aus;
+}
+
+function apiOk(url) {
+  var m = API_RE.exec(String(url === null || url === undefined ? '' : url));
+  return !!m && sha256ascii(m[1]) === API_HASH;
+}
+
 (function fromLink() {
   var raw = (location.hash || '').replace(/^#/, '') || (location.search || '').replace(/^\?/, '');
   if (!raw) return;
-  var p = new URLSearchParams(raw), got = false;
-  if (p.get('api')) { cfg.api = p.get('api'); got = true; }
-  if (got) { ls(K.cfg, cfg); history.replaceState(null, '', location.pathname); }
+  var api = new URLSearchParams(raw).get('api');
+  history.replaceState(null, '', location.pathname);
+  if (!api || !apiOk(api)) return;
+
+  if (cfg.tok && cfg.api && cfg.api !== api) return;
+  cfg.api = api; ls(K.cfg, cfg);
 })();
 
 function $(id) { return document.getElementById(id); }
@@ -238,6 +315,9 @@ function flashT(kind, key, b, bKey) {
   paint(); signal(kind);
 }
 
+var SPINNER = '<span class="spin"></span>';
+var pairBusy = false;
+
 function applyLang() {
   document.documentElement.lang = lang === 'zh' ? 'zh' : 'de';
   document.title = t('title');
@@ -247,6 +327,8 @@ function applyLang() {
   $('lang').textContent = lang === 'zh' ? '中' : 'DE';
   $('btnCam').textContent = stream ? t('camOff') : t('cam');
   $('meRole').textContent = cfg.rw ? '' : t('readonly');
+
+  if (pairBusy) $('cfgPair').innerHTML = SPINNER;
   paint();
   renderVerteilungen();
 }
@@ -260,6 +342,13 @@ function ssccCore(raw) {
 function ssccShow(core) { return core ? '00' + core : ''; }
 function normSscc(raw) { return ssccShow(ssccCore(raw)); }
 function ssccEq(a, b) { var x = ssccCore(a); return x !== '' && x === ssccCore(b); }
+
+function splitMulti(s) {
+  return String(s == null ? '' : s).split('|').filter(function (x) { return x !== ''; });
+}
+function ssccOhne(feld, sscc) {
+  return splitMulti(feld).filter(function (x) { return !ssccEq(x, sscc); });
+}
 function gs1Ok(raw) {
   var s = ssccCore(raw);
   if (!s) return false;
@@ -296,7 +385,9 @@ function guard(d) {
   return d;
 }
 
-var queue = ls(K.queue) || [], flushing = false;
+var queue = ls(K.queue) || [], flushing = false, abgelehnt = false;
+var FLUSH_VERSUCHE = 3, versuche = 0;
+function warte(ms) { return new Promise(function (fertig) { setTimeout(fertig, ms); }); }
 var cache = ls(K.cache) || { at:0, verteilungen:[], labels:[] };
 var byLid = {};
 function reindex() {
@@ -329,9 +420,27 @@ function flush() {
   flushing = true;
   var job = queue[0];
   return apiPost(job.action, job.body).then(function (d) {
-    if (d && (d.ok || d.code)) { queue.shift(); ls(K.queue, queue); setNet(true); queueShow(); }
     flushing = false;
+    if (!d) { setNet(false); return; }
+
+    if (!d.ok && !d.code && versuche < FLUSH_VERSUCHE) {
+      versuche++;
+      return warte(versuche * 2000).then(flush);
+    }
+    versuche = 0;
+
+    queue.shift(); ls(K.queue, queue); setNet(true); queueShow();
+
+    if (!d.ok && d.code !== 'auth') {
+      abgelehnt = true;
+      if (d.code === 'readonly') flashT('bad', 'readonly');
+      else flash('bad', d.error || d.code || '');
+    }
+
+    if (d.ok && d.results && d.results.some(function (r) { return !r.ok; })) abgelehnt = true;
+
     if (queue.length) return flush();
+    if (abgelehnt) { abgelehnt = false; return sync(); }
   }).catch(function () { flushing = false; setNet(false); });
 }
 window.addEventListener('online', function () { setNet(true); flush(); });
@@ -352,6 +461,16 @@ Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (
 });
 
 var pal = null;
+
+function palVorhanden(sscc) {
+  return (cache.labels || []).filter(function (l) {
+    return splitMulti(l.sscc).some(function (x) { return ssccEq(x, sscc); });
+  }).map(function (l) {
+    return { lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid,
+             alt:true, shipped:String(l.status) === '已出货' };
+  });
+}
+
 function palRender() {
   show($('palletBox'), !!pal);
   if (!pal) return;
@@ -361,23 +480,58 @@ function palRender() {
   $('storeBig').textContent = names.length ? names.join(' / ') : '–';
   $('ssccTxt').textContent = pal.sscc.replace(/(\d{4})(?=\d)/g, '$1 ');
   $('lidList').innerHTML = pal.lids.map(function (l, i) {
-    return '<div class="row"><span class="g"><span class="m">' + esc(l.lid) + '</span>' +
+    return '<div class="row' + (l.alt ? ' alt' : '') + '"><span class="g"><span class="m">' +
+      esc(l.lid) + '</span>' +
       '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) + '</div></span>' +
       '<span class="x" data-rm="' + i + '">&times;</span></div>';
   }).join('');
   Array.prototype.forEach.call($('lidList').querySelectorAll('[data-rm]'), function (x) {
-    x.onclick = function () { pal.lids.splice(Number(x.dataset.rm), 1); palRender(); };
+    x.onclick = function () {
+      var i = Number(x.dataset.rm), l = pal.lids[i];
+      if (!l) return;
+
+      if (l.alt && l.shipped) { flashT('bad', 'shipped', l.lid); return; }
+      pal.lids.splice(i, 1);
+
+      if (l.alt) pal.weg.push(l.lid);
+      palRender();
+    };
   });
 }
 function palCommit(silent) {
-  if (!pal || !pal.lids.length) { pal = null; palRender(); return; }
-  enqueue({ action:'bindPallet', body:{ sscc:pal.sscc, lids:pal.lids.map(function (l) { return l.lid; }) } });
-  pal.lids.forEach(function (l) {
-    var c = byLid[l.lid];
-    if (c) { c.status = '已绑定'; c.sscc = pal.sscc; }
-  });
+  if (!pal) return;
+  var weg = pal.weg || [];
+  var neu = pal.lids.filter(function (l) { return !l.alt; })
+                    .map(function (l) { return l.lid; });
+
+  if (!neu.length && !weg.length) { pal = null; palRender(); return; }
+
+  if (weg.length) {
+    enqueue({ action:'unbind', body:{ sscc:pal.sscc, lids:weg } });
+    weg.forEach(function (lid) {
+      var c = byLid[lid];
+      if (!c) return;
+      var rest = ssccOhne(c.sscc, pal.sscc);
+      c.sscc = rest.join('|');
+      if (String(c.status) !== '已出货') c.status = rest.length ? '已绑定' : '待绑定';
+    });
+  }
+  if (neu.length) {
+    enqueue({ action:'bindPallet', body:{ sscc:pal.sscc, lids:neu } });
+    neu.forEach(function (lid) {
+      var c = byLid[lid];
+      if (!c) return;
+      var rest = ssccOhne(c.sscc, pal.sscc);
+      rest.push(pal.sscc);
+      c.sscc = rest.join('|');
+      if (String(c.status) !== '已出货') c.status = '已绑定';
+    });
+  }
   ls(K.cache, cache); reindex();
-  if (!silent) flashT('ok', 'saved', pal.lids.length + '');
+  if (!silent) {
+    if (neu.length) flashT('ok', 'saved', neu.length + (weg.length ? ' −' + weg.length : ''));
+    else flashT('ok', 'unbound', weg.length + '');
+  }
   pal = null; palRender();
 }
 
@@ -388,6 +542,8 @@ function onScan(text) {
   lastText = text; lastAt = now;
   var c = classify(text);
   if (!c.kind) { flashT('bad', 'noRead'); return; }
+
+  if (cfg.oneShot && stream) stopCam();
   if (mode === 'info') return doInfo(c);
   if (mode === 'ship') return doShip(c);
   return doBind(c);
@@ -397,7 +553,7 @@ function doBind(c) {
   if (c.kind === 'sscc') {
     if (pal && ssccEq(pal.sscc, c.value)) { flashT('warn', 'already'); return; }
     if (pal) palCommit(true);
-    pal = { sscc:c.value, checkOk:c.checkOk, lids:[] };
+    pal = { sscc:c.value, checkOk:c.checkOk, lids:palVorhanden(c.value), weg:[] };
     palRender();
     if (c.checkOk) flashT('ok', 'newPal', c.value.slice(-6));
     else flashT('warn', 'newPal', '', 'check');
@@ -406,8 +562,20 @@ function doBind(c) {
   if (!pal) { flashT('bad', 'needCode'); return; }
   var l = byLid[c.value];
   if (!l) { flashT('bad', 'unknown', c.value); return; }
+
+  var wi = pal.weg.indexOf(c.value);
+  if (wi >= 0) {
+    pal.weg.splice(wi, 1);
+    pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid,
+                    alt:true, shipped:String(l.status) === '已出货' });
+    palRender();
+    flash('ok', l.store, l.seq + '/' + l.total);
+    return;
+  }
   if (pal.lids.some(function (x) { return x.lid === c.value; })) { flashT('warn', 'already'); return; }
-  if (l.sscc && !ssccEq(l.sscc, pal.sscc)) flashT('bad', 'boundElse', String(l.sscc).slice(-6));
+
+  var andere = ssccOhne(l.sscc, pal.sscc);
+  if (andere.length) { flashT('bad', 'boundElse', String(andere[0]).slice(-6)); return; }
   var fremd = pal.lids.filter(function (x) { return x.store !== l.store; });
   pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid });
   palRender();
@@ -580,6 +748,7 @@ function openSetup(on) {
   if (!on) return;
   $('cfgApi').value = cfg.api;
   $('cfgCode').value = '';
+  $('cfgOneShot').checked = !!cfg.oneShot;
   show($('pairBox'), !cfg.tok);
   show($('doneBox'), !!cfg.tok);
   $('meName').textContent = cfg.who || '';
@@ -587,28 +756,54 @@ function openSetup(on) {
 }
 $('gear').onclick = function () { openSetup($('setup').classList.contains('hide')); };
 
+function setPairBusy(on) {
+  pairBusy = on;
+  var b = $('cfgPair');
+  b.disabled = on;
+  b.innerHTML = on ? SPINNER : esc(t('save'));
+  $('cfgCode').disabled = on;
+  $('cfgApi').disabled = on;
+}
+
 $('cfgPair').onclick = function () {
+  if (pairBusy) return;
   var api = $('cfgApi').value.trim();
   var code = $('cfgCode').value.trim().toUpperCase();
-  if (!api || api.indexOf('/exec') < 0 || !code) { $('cfgMsg').textContent = '!'; return; }
+  if (!apiOk(api) || !code) { $('cfgMsg').textContent = '!'; return; }
   cfg.api = api; ls(K.cfg, cfg);
-  $('cfgMsg').textContent = t('reading');
+  $('cfgMsg').textContent = '';
+  setPairBusy(true);
+
+  var frist = setTimeout(function () {
+    if (!pairBusy) return;
+    setPairBusy(false);
+    $('cfgMsg').textContent = t('offline');
+  }, 30000);
   apiPost('pair', { code:code }).then(function (d) {
+    clearTimeout(frist);
+    setPairBusy(false);
     if (!d.ok) {
-      $('cfgMsg').textContent = d.code === 'locked' ? t('locked') : t('codeBad');
+      $('cfgMsg').textContent =
+        d.code === 'locked' ? t('locked') :
+        d.code === 'toomany' ? t('toomany') : t('codeBad');
       return;
     }
     cfg.tok = d.token; cfg.who = d.who; cfg.rw = !!d.rw;
     ls(K.cfg, cfg);
-    $('cfgMsg').textContent = '';
     boot();
-  }).catch(function () { $('cfgMsg').textContent = t('offline'); });
+  }).catch(function () {
+    clearTimeout(frist);
+    setPairBusy(false);
+    $('cfgMsg').textContent = t('offline');
+  });
 };
 
 $('cfgUnpair').onclick = function () {
   cfg.tok = ''; cfg.who = ''; ls(K.cfg, cfg);
   openSetup(true);
 };
+
+$('cfgOneShot').onchange = function () { cfg.oneShot = this.checked; ls(K.cfg, cfg); };
 
 $('cfgCode').oninput = function () {
   this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
