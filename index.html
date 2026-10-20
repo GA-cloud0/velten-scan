@@ -93,6 +93,10 @@
     animation:spin .8s linear infinite; vertical-align:-4px; }
   button.b[disabled] { opacity:.6; }
 
+  button.b.rot { background:var(--rot); }
+  .row .ok { color:var(--gruen); font-weight:800; }
+  .row .offen { color:var(--dim); }
+
   .big.versendet { border-color:var(--rot); color:var(--rot); background:#fdecee; }
   .banner { margin-top:8px; padding:11px 10px; border-radius:9px; text-align:center;
     font-size:17px; font-weight:800; background:var(--rot); color:#fff; word-break:break-word; }
@@ -156,10 +160,11 @@
 <div id="app" class="hide" style="display:flex;flex-direction:column;flex:1;min-height:0">
   <div id="flash"><div class="a"></div><div class="b"></div></div>
 
-  <nav>
+  <nav id="nav">
     <button data-mode="bind" class="sel" data-t="bind">Binden</button>
     <button data-mode="ship" data-t="ship">Ausgang</button>
     <button data-mode="stand" data-t="stand">Stand</button>
+    <button data-mode="recv" data-t="recv">Eingang</button>
   </nav>
 
   <main>
@@ -202,6 +207,19 @@
       </div>
     </section>
     <section id="mStand" class="hide"><div id="vList"></div></section>
+    <section id="mRecv" class="hide">
+      <div id="recvBox" class="hide">
+        <div class="big" id="recvStore">&ndash;</div>
+        <div class="sscc" id="recvSscc"></div>
+        <div id="recvBanner" class="banner"></div>
+        <div id="recvList"></div>
+        <div style="height:10px"></div>
+        <div class="two">
+          <button id="btnRecvNo" class="b g" data-t="cancel">Abbrechen</button>
+          <button id="btnRecvOk" class="b" data-t="recvConfirm">Eingang buchen</button>
+        </div>
+      </div>
+    </section>
 
     <div style="height:14px"></div>
     <button id="btnSync" class="b g w" data-t="reload">Laden</button>
@@ -229,7 +247,13 @@ var TXT = {
         emptyPal:'Nichts gebunden', confirmShip:'Ausgang buchen', cancel:'Abbrechen',
         shipDone:'Ausgang gebucht', queued:'Wird gesendet',
         shipBusy:'Erst buchen oder abbrechen', pending:'Noch nicht gesendet',
-        shipHeld:'Ausgang angehalten - neu bestaetigen', voided:'Entwertet' },
+        shipHeld:'Ausgang angehalten - neu bestaetigen', voided:'Entwertet',
+        recv:'Eingang', recvConfirm:'Eingang buchen', recvUndo:'Eingang stornieren',
+        recvUndoAsk:'Schon eingegangen - stornieren?', recvDone:'Eingang gebucht',
+        recvUndone:'Storniert', recvElse:'Bei anderer Filiale eingegangen',
+        recvNotShipped:'Nicht als ausgeliefert erfasst', recvUseBarcode:'Bitte Dachser-Barcode scannen',
+        recvNeedNet:'Ohne Netz nur Dachser-Barcode', offlineNoCheck:'Offline - Filiale unbekannt',
+        forbidden:'Keine Berechtigung', close:'Schliessen' },
   zh: { title:'Velten 扫描', bind:'绑定', ship:'出货', stand:'进度',
         cam:'摄像头', camOff:'停止', photo:'拍照', done:'完成', drop:'取消',
         reload:'刷新', save:'确定', code:'配对码', unpair:'解除',
@@ -245,12 +269,19 @@ var TXT = {
         emptyPal:'板上无贴纸', confirmShip:'确认出货', cancel:'取消',
         shipDone:'出货完成', queued:'待发送',
         shipBusy:'请先确认或取消', pending:'尚未上传',
-        shipHeld:'出货已暂停，请重新确认', voided:'已作废' }
+        shipHeld:'出货已暂停，请重新确认', voided:'已作废',
+        recv:'接货', recvConfirm:'确认接货', recvUndo:'确认撤回',
+        recvUndoAsk:'已接货，是否撤回？', recvDone:'接货完成',
+        recvUndone:'已撤回', recvElse:'已被其他门店接货',
+        recvNotShipped:'未登记出货', recvUseBarcode:'请扫 Dachser 条码',
+        recvNeedNet:'无网络时只能扫 Dachser 条码', offlineNoCheck:'离线，无法核对门店',
+        forbidden:'无权限', close:'关闭' }
 };
 var lang = 'de';
 function t(k) { return (TXT[lang] && TXT[lang][k]) || TXT.de[k] || k; }
 
-var K = { cfg:'velten.cfg', cache:'velten.cache', queue:'velten.queue', lang:'velten.lang' };
+var K = { cfg:'velten.cfg', cache:'velten.cache', queue:'velten.queue', lang:'velten.lang',
+          empfang:'velten.empfang' };
 function ls(k, v) {
   try {
     if (v === undefined) { var s = localStorage.getItem(k); return s ? JSON.parse(s) : null; }
@@ -379,12 +410,13 @@ function applyLang() {
   });
   $('lang').textContent = lang === 'zh' ? '中' : 'DE';
   $('btnCam').textContent = stream ? t('camOff') : t('cam');
-  $('meRole').textContent = cfg.rw ? '' : t('readonly');
+  $('meRole').textContent = cfg.rolle || (cfg.rw ? '' : t('readonly'));
 
   if (pairBusy) $('cfgPair').innerHTML = SPINNER;
 
   palRender();
   ausRender();
+  empRender();
   paint();
   renderVerteilungen();
 }
@@ -428,7 +460,16 @@ function mitFrist(p, ms) {
   });
 }
 
-var MELDUNG_FUER = { already_shipped:'palShipped', empty:'emptyPal', readonly:'readonly' };
+var MELDUNG_FUER = { already_shipped:'palShipped', empty:'emptyPal', readonly:'readonly',
+                     forbidden:'forbidden', unknown:'notFound', received_elsewhere:'recvElse',
+                     not_mine:'recvElse' };
+
+function darf(aktion) {
+  if (cfg.rechte) return cfg.rechte.indexOf(aktion) >= 0;
+  if (aktion === 'receivePallet' || aktion === 'receiveInfo' || aktion === 'unreceivePallet') return false;
+  if (aktion === 'sync' || aktion === 'lookup' || aktion === 'dashboard') return true;
+  return cfg.rw !== false;
+}
 
 function apiGet(action, params) {
   var p = new URLSearchParams(Object.assign({ action:action, tok:cfg.tok }, params || {}));
@@ -628,6 +669,8 @@ function flushSchritt() {
         lids:d.results.filter(function (r) { return r.ok; }).map(function (r) { return r.lid; }) } } : job);
 
       if (job.action === 'shipPallet') flashT('ok', 'shipDone', wo);
+      if (job.action === 'receivePallet') flashT('ok', 'recvDone', wo);
+      if (job.action === 'unreceivePallet') flashT('ok', 'recvUndone', wo);
     }
     queueShow();
     return flushSchritt();
@@ -653,13 +696,31 @@ function modusSetzen(neu) {
   show($('mBind'), mode === 'bind');
   show($('mShip'), mode === 'ship');
   show($('mStand'), mode === 'stand');
+  show($('mRecv'), mode === 'recv');
 
   show($('scanBox'), mode !== 'stand');
   if (mode === 'stand' && stream) stopCam();
 
   if (mode !== 'ship' && aus && !aus.sende) { aus = null; ausRender(); }
+  if (mode !== 'recv' && emp && !emp.sende) { emp = null; empRender(); }
   flashT('', mode);
   if (mode === 'stand') sync();
+}
+
+function reiterRichten() {
+  var sicht = { bind:darf('bindPallet'), ship:darf('shipPallet'),
+                stand:darf('sync'), recv:darf('receivePallet') };
+  var erlaubt = [];
+  Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
+    var ja = !!sicht[b.dataset.mode];
+    show(b, ja);
+    if (ja) erlaubt.push(b.dataset.mode);
+  });
+  show($('nav'), erlaubt.length > 1);
+
+  show($('btnSync'), sicht.stand);
+  show($('cnt'), sicht.stand);
+  if (erlaubt.length && erlaubt.indexOf(mode) < 0) modusSetzen(erlaubt[0]);
 }
 
 Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
@@ -782,7 +843,7 @@ function palRender() {
       if (!l) return;
 
       if (pal.zustand === 'shipped' || (l.alt && l.gesperrt)) { flashT('bad', 'palShipped', l.lid); return; }
-      if (cfg.rw === false) { flashT('bad', 'readonly'); return; }
+      if (!darf('unbind')) { flashT('bad', 'forbidden'); return; }
       pal.lids.splice(i, 1);
 
       if (l.alt) pal.weg.push(l.lid);
@@ -819,8 +880,12 @@ var lastText = '', lastAt = 0;
 function scanFreigeben(ausser) {
   if (!lastText) return;
   if (ausser) {
-    var c = classify(lastText);
-    if (c.kind === 'sscc' && ssccEq(c.value, ausser)) return;
+
+    var c = classify(lastText), liste = [].concat(ausser);
+    for (var i = 0; i < liste.length; i++) {
+      if (c.kind === 'sscc' && ssccEq(c.value, liste[i])) return;
+      if (c.kind === 'lid' && c.value === String(liste[i]).toUpperCase()) return;
+    }
   }
   lastText = '';
 }
@@ -836,6 +901,7 @@ function onScan(text) {
 
   if (cfg.oneShot && stream) stopCam();
   if (mode === 'ship') return doShip(c);
+  if (mode === 'recv') return doRecv(c);
   return doBind(c);
 }
 
@@ -857,7 +923,7 @@ function doBind(c) {
   }
   if (!pal) { flashT('bad', 'needCode'); return; }
 
-  if (cfg.rw === false) { flashT('bad', 'readonly'); return; }
+  if (!darf('bindPallet')) { flashT('bad', 'forbidden'); return; }
 
   if (pal.zustand === 'shipped') { flashT('bad', 'palShipped'); return; }
   var l = byLid[c.value];
@@ -940,7 +1006,7 @@ function ausPruefen(a, nochmal) {
 }
 
 function ausBereit(a) {
-  return !!a && !a.pruefen && !a.sende && !a.unbekannt && cfg.rw !== false &&
+  return !!a && !a.pruefen && !a.sende && !a.unbekannt && darf('shipPallet') &&
          a.zustand !== 'shipped' && a.lids.length > 0;
 }
 
@@ -962,7 +1028,7 @@ function ausRender() {
   else if (offen) { text = t('pending'); teil = true; }
   else if (a.offline) { text = t('offline'); teil = true; }
 
-  else if (cfg.rw === false) { text = t('readonly'); teil = true; }
+  else if (!darf('shipPallet')) { text = t('forbidden'); teil = true; }
   $('shipBanner').className = 'banner' + (teil ? ' teil' : '');
   $('shipBanner').textContent = text;
 
@@ -974,7 +1040,7 @@ function ausRender() {
   }).join('');
 
   var ok = $('btnShipOk');
-  show(ok, !a.unbekannt && !raus && cfg.rw !== false && (a.pruefen || a.lids.length > 0));
+  show(ok, !a.unbekannt && !raus && darf('shipPallet') && (a.pruefen || a.lids.length > 0));
   ok.disabled = !ausBereit(a);
   ok.innerHTML = (a.pruefen || a.sende) ? SPINNER : esc(t('confirmShip'));
 }
@@ -1016,6 +1082,210 @@ function ausAbbrechen() {
   if (!aus || aus.sende) return;
   scanFreigeben(aus.sscc);
   aus = null; ausRender(); flashT('', 'dropped');
+}
+
+var emp = null;
+
+var EMP_SCHONFRIST = 8000;
+var empZuletzt = null;
+var empLokal = ls(K.empfang) || {};
+
+function empLokalMerken(sscc, eintrag) {
+  var k = ssccCore(sscc);
+  if (eintrag) empLokal[k] = eintrag; else delete empLokal[k];
+
+  var grenze = Date.now() - 30 * 86400000;
+  Object.keys(empLokal).forEach(function (x) {
+    if (!empLokal[x] || new Date(empLokal[x].at).getTime() < grenze) delete empLokal[x];
+  });
+  ls(K.empfang, empLokal);
+}
+
+function gehoertZu(c, x) {
+  if (!x) return false;
+  if (c.kind === 'sscc') return !!x.sscc && ssccEq(c.value, x.sscc);
+  return (x.lids || []).indexOf(c.value) >= 0;
+}
+
+function empAusstehend(sscc) {
+  var letzte = '';
+  ausstehend(sscc).forEach(function (j) {
+    if (j.action === 'receivePallet') letzte = 'an';
+    if (j.action === 'unreceivePallet') letzte = 'ab';
+  });
+  return letzte;
+}
+
+function kurzZeit(wert) {
+  var d = wert ? new Date(wert) : null;
+  if (!d || isNaN(d.getTime())) return '';
+  var zz = function (x) { return ('0' + x).slice(-2); };
+  return zz(d.getDate()) + '.' + zz(d.getMonth() + 1) + ' ' + zz(d.getHours()) + ':' + zz(d.getMinutes());
+}
+
+function doRecv(c) {
+  if (c.kind !== 'sscc' && c.kind !== 'lid') return;
+
+  if (empZuletzt && Date.now() - empZuletzt.at < EMP_SCHONFRIST && gehoertZu(c, empZuletzt)) return;
+  if (emp) {
+    if (gehoertZu(c, emp)) {
+      if (emp.art !== 'sammeln') return;
+      if (c.kind === 'sscc') {
+
+        emp.art = 'annehmen';
+      } else {
+        emp.gesehen[c.value] = true;
+        if (emp.lids.every(function (l) { return emp.gesehen[l]; })) emp.art = 'annehmen';
+      }
+      empRender();
+      flash(emp.art === 'annehmen' ? 'ok' : '', splitMulti(emp.store).join(' / '), empStand(emp));
+      return;
+    }
+
+    if (emp.art !== 'info' || emp.pruefen || emp.sende) {
+      flashT('warn', 'shipBusy', (emp.sscc || emp.code).slice(-6));
+      return;
+    }
+  }
+  return empPruefen(c);
+}
+
+function empStand(e) {
+  var n = e.lids.filter(function (l) { return e.gesehen[l]; }).length;
+  return n + '/' + e.lids.length;
+}
+
+function empPruefen(c) {
+  var e = emp = { art:'pruefen', code:c.value, sscc:c.kind === 'sscc' ? c.value : '', lids:[],
+                  store:'', gesehen:{}, info:null, pruefen:true, sende:false, offline:false,
+                  zeit:new Date().toISOString() };
+  if (c.kind === 'lid') e.gesehen[c.value] = true;
+  empRender();
+  flashT('', 'recv', c.value.slice(-6));
+
+  return mitFrist(flush(), 8000).catch(function () {}).then(function () {
+    return mitFrist(apiGet('receiveInfo', { q:c.value }), 10000);
+  }).then(function (d) {
+    if (emp !== e) return;
+    e.pruefen = false;
+    if (!d) throw new Error('netz');
+    if (!d.ok) {
+      emp = null; empRender();
+      if (d.code !== 'auth') flash('bad', d.error || d.code || '', c.value.slice(-6));
+      return;
+    }
+    if (!d.found) { emp = null; empRender(); flashT('bad', 'notFound', c.value.slice(-6)); return; }
+    if (d.ohnePalette || d.mehrdeutig || !d.pallet) {
+      emp = null; empRender(); flashT('bad', 'recvUseBarcode', c.value.slice(-6)); return;
+    }
+    var p = d.pallet;
+    e.info = p; e.sscc = p.sscc; e.store = p.store; e.lids = p.lids || [];
+    var unterwegs = empAusstehend(e.sscc);
+    var meins = unterwegs ? unterwegs === 'an' : (!!p.receivedAt && p.mine);
+    if (meins) e.art = 'stornieren';
+    else if (p.receivedAt && !p.mine && unterwegs !== 'ab') e.art = 'info';
+    else if (c.kind === 'lid' && e.lids.length > 1) e.art = 'sammeln';
+    else e.art = 'annehmen';
+    empRender();
+    if (e.art === 'info') flashT('bad', 'recvElse', p.receivedStore);
+    else if (e.art === 'stornieren') flashT('warn', 'recvUndoAsk');
+    else flash(e.art === 'annehmen' ? 'ok' : '', splitMulti(e.store).join(' / ') || '–',
+               e.art === 'sammeln' ? empStand(e) : e.lids.length + '');
+  }).catch(function () {
+    if (emp !== e) return;
+    e.pruefen = false;
+
+    if (c.kind === 'lid') { emp = null; empRender(); flashT('bad', 'recvNeedNet'); return; }
+    e.offline = true;
+    var hier = empLokal[ssccCore(e.sscc)], unterwegs2 = empAusstehend(e.sscc);
+    var meins2 = unterwegs2 ? unterwegs2 === 'an' : !!hier;
+    e.art = meins2 ? 'stornieren' : 'annehmen';
+    if (hier) e.store = hier.store || '';
+    empRender();
+    flashT('warn', 'offlineNoCheck');
+  });
+}
+
+function empRender() {
+  show($('recvBox'), !!emp);
+  if (!emp) return;
+  var e = emp, p = e.info || {};
+  $('recvStore').textContent = e.store ? splitMulti(e.store).join(' / ') : '–';
+  $('recvSscc').textContent = e.sscc ? e.sscc.replace(/(\d{4})(?=\d)/g, '$1 ') : e.code;
+
+  var text = '', teil = false;
+  if (e.art === 'info') {
+    text = t('recvElse') + ': ' + (p.receivedStore || '') + (kurzZeit(p.receivedAt) ? ' · ' + kurzZeit(p.receivedAt) : '');
+  } else if (e.art === 'stornieren') {
+    text = t('recvUndoAsk') + (kurzZeit(p.receivedAt) ? ' · ' + kurzZeit(p.receivedAt) : '');
+    teil = true;
+  } else if (e.offline) {
+    text = t('offlineNoCheck'); teil = true;
+  } else if (e.info && !p.shipped) {
+    text = t('recvNotShipped'); teil = true;
+  }
+  $('recvBanner').className = 'banner' + (teil ? ' teil' : '');
+  $('recvBanner').textContent = text;
+
+  $('recvList').innerHTML = e.lids.map(function (lid) {
+    var ja = e.art === 'sammeln' ? !!e.gesehen[lid] : null;
+    return '<div class="row"><span class="g"><span class="m">' + esc(lid) + '</span></span>' +
+      (ja === null ? '' : '<span class="' + (ja ? 'ok' : 'offen') + '">' + (ja ? '&#10003;' : '&#9675;') + '</span>') +
+      '</div>';
+  }).join('');
+
+  var knopf = e.art === 'annehmen' ? 'recvConfirm' : e.art === 'stornieren' ? 'recvUndo' : '';
+  var ok = $('btnRecvOk');
+  show(ok, !!knopf || e.pruefen);
+  ok.disabled = e.pruefen || e.sende || !knopf;
+  ok.className = 'b' + (e.art === 'stornieren' ? ' rot' : '');
+  ok.innerHTML = (e.pruefen || e.sende) ? SPINNER : esc(t(knopf || 'recvConfirm'));
+  $('btnRecvNo').textContent = t(e.art === 'info' ? 'close' : 'cancel');
+}
+
+function empBuchen() {
+  var e = emp;
+  if (!e || e.pruefen || e.sende || (e.art !== 'annehmen' && e.art !== 'stornieren')) return Promise.resolve();
+  var an = e.art === 'annehmen';
+  var aktion = an ? 'receivePallet' : 'unreceivePallet';
+  var body = { sscc:e.sscc, scannedAt:e.zeit };
+  var wo = e.sscc.slice(-6);
+  function erledigt(art, key) {
+    empLokalMerken(e.sscc, an ? { at:e.zeit, store:e.store } : null);
+    empZuletzt = { sscc:e.sscc, lids:e.lids.slice(), at:Date.now() };
+    scanFreigeben([e.sscc].concat(e.lids));
+    if (emp === e) { emp = null; empRender(); }
+    flash(art, splitMulti(e.store).join(' / ') || wo, t(key));
+  }
+
+  if (e.offline || ausstehend(e.sscc).length) {
+    enqueue({ action:aktion, body:body });
+    erledigt('warn', 'queued');
+    return Promise.resolve();
+  }
+  e.sende = true; empRender();
+  return mitFrist(apiPost(aktion, body), 15000).then(function (d) {
+    if (d && d.ok) { erledigt('ok', an ? 'recvDone' : 'recvUndone'); return; }
+    e.sende = false;
+
+    if (d && (d.code === 'received_elsewhere' || d.code === 'not_mine') && d.pallet && emp === e) {
+      e.info = d.pallet; e.art = 'info';
+    }
+    if (emp === e) empRender();
+    if (d && MELDUNG_FUER[d.code]) flashT('bad', MELDUNG_FUER[d.code], wo);
+    else if (!d || d.code !== 'auth') flash('bad', (d && (d.error || d.code)) || '', wo);
+  }, function () {
+
+    enqueue({ action:aktion, body:body });
+    erledigt('warn', 'queued');
+  });
+}
+
+function empAbbrechen() {
+  if (!emp || emp.sende) return;
+
+  scanFreigeben([emp.sscc || emp.code].concat(emp.lids, [emp.code]));
+  emp = null; empRender(); flashT('', 'dropped');
 }
 
 var standAuf = {};
@@ -1194,6 +1464,8 @@ $('btnCommit').onclick = function () { palCommit(); };
 $('btnDrop').onclick = function () { pal = null; palRender(); flashT('', 'dropped'); };
 $('btnShipOk').onclick = function () { ausBuchen(); };
 $('btnShipNo').onclick = function () { ausAbbrechen(); };
+$('btnRecvOk').onclick = function () { empBuchen(); };
+$('btnRecvNo').onclick = function () { empAbbrechen(); };
 
 $('btnSync').onclick = function () {
   sync().then(function (ok) { if (ok) flashT('ok', 'reload'); else flashT('bad', 'offline'); });
@@ -1209,7 +1481,7 @@ function openSetup(on) {
   show($('pairBox'), !cfg.tok);
   show($('doneBox'), !!cfg.tok);
   $('meName').textContent = cfg.who || '';
-  $('meRole').textContent = cfg.rw ? '' : t('readonly');
+  $('meRole').textContent = cfg.rolle || (cfg.rw ? '' : t('readonly'));
 }
 $('gear').onclick = function () { openSetup($('setup').classList.contains('hide')); };
 
@@ -1246,6 +1518,7 @@ $('cfgPair').onclick = function () {
       return;
     }
     cfg.tok = d.token; cfg.who = d.who; cfg.rw = !!d.rw;
+    cfg.rolle = d.role || ''; cfg.rechte = d.rechte || null;
     ls(K.cfg, cfg);
     boot();
   }).catch(function () {
@@ -1256,7 +1529,7 @@ $('cfgPair').onclick = function () {
 };
 
 $('cfgUnpair').onclick = function () {
-  cfg.tok = ''; cfg.who = ''; ls(K.cfg, cfg);
+  cfg.tok = ''; cfg.who = ''; cfg.rolle = ''; cfg.rechte = null; ls(K.cfg, cfg);
   openSetup(true);
 };
 
@@ -1271,7 +1544,22 @@ function boot() {
   $('who').textContent = cfg.who || '';
   openSetup(false);
   meldung = { kind:'', key:'ready', a:'', b:'', bKey:'' };
-  applyLang(); reindex(); queueShow(); sync().then(flush);
+  applyLang(); reiterRichten(); reindex(); queueShow();
+
+  werBinIch().then(function () {
+    reiterRichten();
+    return darf('sync') ? sync() : null;
+  }).then(flush);
+}
+
+function werBinIch() {
+  return mitFrist(apiGet('whoami'), 10000).then(function (d) {
+    if (!d || !d.ok) return;
+    cfg.rolle = d.role || ''; cfg.rechte = d.rechte || null;
+    if (d.who) cfg.who = d.who;
+    ls(K.cfg, cfg);
+    $('who').textContent = cfg.who || '';
+  }).catch(function () {});
 }
 if (cfg.api && cfg.tok) {
   boot();
