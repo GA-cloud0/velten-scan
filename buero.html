@@ -1,0 +1,441 @@
+<!doctype html>
+
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>go asia 货物物流</title>
+<link rel="icon" href="icon.svg">
+<style>  :root {
+    --gruen:#006935; --da:#1e8e3e; --weg:#f29900; --offen:#dadce0; --rot:#d93025;
+    --text:#202124; --leise:#5f6368; --linie:#e3e6e8; --hover:#f1f3f4;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#fff; color:var(--text);
+         font:14px/1.45 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
+  .hide { display:none !important; }
+  button { font:inherit; cursor:pointer; border:1px solid var(--linie); background:#fff;
+           border-radius:6px; padding:4px 12px; color:var(--text); }
+  button:hover { background:var(--hover); }
+  button:disabled { cursor:default; opacity:.6; }
+
+  header { display:flex; align-items:center; gap:12px; padding:10px 24px;
+           border-bottom:3px solid var(--gruen); }
+  header img { height:30px; }
+  header .sp { flex:1; }
+  #wer { color:var(--leise); }
+  #meldung { color:var(--rot); }
+  #neu { font-size:16px; line-height:1; padding:5px 10px; }
+  #neu.dreht { animation:dreh 1s linear infinite; }
+  @keyframes dreh { to { transform:rotate(360deg); } }
+
+  main { max-width:1100px; margin:0 auto; padding:16px 24px 40px; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; color:var(--leise); font-weight:600; padding:8px 10px;
+       border-bottom:1px solid var(--linie); white-space:nowrap; }
+  td { padding:8px 10px; border-bottom:1px solid var(--linie); vertical-align:middle; }
+  .zahl { white-space:nowrap; font-variant-numeric:tabular-nums; }
+
+  #liste tbody tr { cursor:pointer; user-select:none; }
+  #liste tbody tr:hover { background:var(--hover); }
+  #liste tr.fertig td { opacity:.45; }
+  .balken { width:220px; height:10px; border-radius:5px; overflow:hidden; display:flex;
+            background:var(--offen); }
+  .balken .da { background:var(--da); }
+  .balken .weg { background:var(--weg); }
+  .warn { color:var(--rot); font-weight:700; }
+
+  .dkopf { display:flex; align-items:center; gap:14px; margin-bottom:10px; }
+  .dkopf b { font-size:16px; }
+  .dkopf .sp { flex:1; }
+  #dZahlen { white-space:pre; }
+  #zurueck { font-size:18px; line-height:1; padding:3px 12px; }
+  #dTab tbody tr:hover { background:var(--hover); }
+  .sscc { font-family:Consolas, "Courier New", monospace; white-space:nowrap; }
+  .st { display:inline-block; width:22px; height:22px; border-radius:5px; color:#fff;
+        text-align:center; line-height:22px; font-weight:700; vertical-align:middle; }
+  .st.offen { background:var(--offen); }
+  .st.unterwegs { background:var(--weg); }
+  .st.da { background:var(--da); }
+  .st + .warn { margin-left:3px; }
+  .legende { display:flex; gap:22px; margin-top:14px; color:var(--leise); align-items:center; }
+  .legende .st { width:14px; height:14px; margin-right:6px; }
+
+  #anmelden { max-width:420px; margin:80px auto 0; }
+  .feld { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .feld svg { width:24px; height:24px; flex:none; color:var(--leise); }
+  .feld svg.rot { color:var(--rot); }
+  .feld input { flex:1; font:inherit; padding:8px 10px; border:1px solid var(--linie); border-radius:6px; }
+  #code { font:700 20px Consolas, monospace; letter-spacing:3px; text-align:center; max-width:160px; }
+  #koppeln { font-size:18px; padding:6px 16px; margin-left:auto; }
+  #fehler { color:var(--rot); min-height:20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="logo.png" alt="go asia">
+  <span class="sp"></span>
+  <span id="meldung"></span>
+  <span id="wer"></span>
+  <button id="neu" class="hide">&#10227;</button>
+  <button id="aus" class="hide">退出</button>
+</header>
+
+<main>
+  <section id="anmelden" class="hide">
+    <div class="feld" id="apiZeile">
+      <svg id="apiZeichen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="4" ry="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+      </svg>
+      <input id="api" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="feld">
+      <svg id="codeZeichen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="7" cy="12" r="5"/><line x1="12" y1="12" x2="22" y2="12"/>
+        <line x1="17" y1="12" x2="17" y2="17"/><line x1="21" y1="12" x2="21" y2="16"/>
+      </svg>
+      <input id="code" maxlength="6" autocomplete="off" spellcheck="false">
+      <button id="koppeln">&#8594;</button>
+    </div>
+    <div id="fehler"></div>
+  </section>
+
+  <section id="liste" class="hide"></section>
+
+  <section id="detail" class="hide">
+    <div class="dkopf">
+      <button id="zurueck">&#8249;</button>
+      <span id="dKw"></span>
+      <b id="dName"></b>
+      <span class="sp"></span>
+      <span id="dZahlen" class="zahl"></span>
+    </div>
+    <div id="dTab"></div>
+  </section>
+</main>
+
+<script>'use strict';
+
+var K = 'velten.buero';
+function ls(v) {
+  try {
+    if (v === undefined) { var s = localStorage.getItem(K); return s ? JSON.parse(s) : null; }
+    localStorage.setItem(K, JSON.stringify(v));
+  } catch (e) { return null; }
+}
+var cfg = ls() || { api:'', tok:'', who:'' };
+
+var API_HASH = '3b607140cff05b4574266226409c1e92480be0e951cf060999b800d2a0b2c839';
+var API_RE = /^https:\/\/script\.google\.com\/(?:a\/[A-Za-z0-9.-]+\/)?macros\/s\/([A-Za-z0-9_-]+)\/exec$/;
+
+function sha256ascii(text) {
+  var K = ('428a2f98 71374491 b5c0fbcf e9b5dba5 3956c25b 59f111f1 923f82a4 ab1c5ed5 ' +
+           'd807aa98 12835b01 243185be 550c7dc3 72be5d74 80deb1fe 9bdc06a7 c19bf174 ' +
+           'e49b69c1 efbe4786 0fc19dc6 240ca1cc 2de92c6f 4a7484aa 5cb0a9dc 76f988da ' +
+           '983e5152 a831c66d b00327c8 bf597fc7 c6e00bf3 d5a79147 06ca6351 14292967 ' +
+           '27b70a85 2e1b2138 4d2c6dfc 53380d13 650a7354 766a0abb 81c2c92e 92722c85 ' +
+           'a2bfe8a1 a81a664b c24b8b70 c76c51a3 d192e819 d6990624 f40e3585 106aa070 ' +
+           '19a4c116 1e376c08 2748774c 34b0bcb5 391c0cb3 4ed8aa4a 5b9cca4f 682e6ff3 ' +
+           '748f82ee 78a5636f 84c87814 8cc70208 90befffa a4506ceb bef9a3f7 c67178f2')
+          .split(' ').map(function (x) { return parseInt(x, 16) | 0; });
+  var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+           0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+  function rr(x, k) { return (x >>> k) | (x << (32 - k)); }
+
+  var s = String(text), b = [], i, j;
+  for (i = 0; i < s.length; i++) b.push(s.charCodeAt(i) & 255);
+  var bits = b.length * 8;
+  b.push(0x80);
+  while (b.length % 64 !== 56) b.push(0);
+  b.push(0, 0, 0, 0, (bits >>> 24) & 255, (bits >>> 16) & 255, (bits >>> 8) & 255, bits & 255);
+
+  var w = new Array(64), a, bq, c, d, e, f, g, h, t1, t2, s0, s1;
+  for (i = 0; i < b.length; i += 64) {
+    for (j = 0; j < 16; j++) {
+      w[j] = (b[i + j * 4] << 24) | (b[i + j * 4 + 1] << 16) |
+             (b[i + j * 4 + 2] << 8) | b[i + j * 4 + 3];
+    }
+    for (j = 16; j < 64; j++) {
+      s0 = rr(w[j - 15], 7) ^ rr(w[j - 15], 18) ^ (w[j - 15] >>> 3);
+      s1 = rr(w[j - 2], 17) ^ rr(w[j - 2], 19) ^ (w[j - 2] >>> 10);
+      w[j] = (((w[j - 16] + s0) | 0) + ((w[j - 7] + s1) | 0)) | 0;
+    }
+    a = H[0]; bq = H[1]; c = H[2]; d = H[3];
+    e = H[4]; f = H[5]; g = H[6]; h = H[7];
+    for (j = 0; j < 64; j++) {
+      t1 = (((h + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25))) | 0) +
+            ((((e & f) ^ (~e & g)) + ((K[j] + w[j]) | 0)) | 0)) | 0;
+      t2 = ((rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) +
+            ((a & bq) ^ (a & c) ^ (bq & c))) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0;
+      d = c; c = bq; bq = a; a = (t1 + t2) | 0;
+    }
+    H[0] = (H[0] + a) | 0; H[1] = (H[1] + bq) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+    H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+  }
+  var aus = '';
+  for (i = 0; i < 8; i++) aus += ('0000000' + (H[i] >>> 0).toString(16)).slice(-8);
+  return aus;
+}
+
+function apiOk(url) {
+  var m = API_RE.exec(String(url === null || url === undefined ? '' : url));
+  return !!m && sha256ascii(m[1]) === API_HASH;
+}
+
+(function fromLink() {
+  var raw = (location.hash || '').replace(/^#/, '') || (location.search || '').replace(/^\?/, '');
+  if (!raw) return;
+  var api = new URLSearchParams(raw).get('api');
+  history.replaceState(null, '', location.pathname);
+  if (!api || !apiOk(api)) return;
+  if (cfg.tok && cfg.api && cfg.api !== api) return;
+  cfg.api = api; ls(cfg);
+})();
+
+function $(id) { return document.getElementById(id); }
+function show(el, an) { el.classList.toggle('hide', !an); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+  return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[c]; }); }
+
+function mitFrist(p, ms) {
+  return new Promise(function (ok, fail) {
+    var uhr = setTimeout(function () { fail(new Error('frist')); }, ms);
+    p.then(function (v) { clearTimeout(uhr); ok(v); }, function (e) { clearTimeout(uhr); fail(e); });
+  });
+}
+function holen(params) {
+  var p = new URLSearchParams(Object.assign({ action:'fortschritt', tok:cfg.tok }, params || {}));
+  return mitFrist(fetch(cfg.api + '?' + p.toString()).then(function (r) { return r.json(); }), 30000);
+}
+function senden(action, body) {
+  return mitFrist(fetch(cfg.api, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=UTF-8' },
+    body:JSON.stringify(Object.assign({ action:action }, body || {})) })
+    .then(function (r) { return r.json(); }), 30000);
+}
+
+function zz(x) { return ('0' + x).slice(-2); }
+function datum(x) {
+  var d = x ? new Date(x) : null;
+  return d && !isNaN(d.getTime()) ? d : null;
+}
+function tag(x) { var d = datum(x); return d ? zz(d.getDate()) + '.' + zz(d.getMonth() + 1) : ''; }
+function zeit(x) { var d = datum(x); return d ? tag(x) + ' ' + zz(d.getHours()) + ':' + zz(d.getMinutes()) : ''; }
+function ssccText(s) { return String(s || '').replace(/(\d{4})(?=\d)/g, '$1 '); }
+function anteil(n, gesamt) { return gesamt ? (Math.max(0, n) / gesamt * 100).toFixed(1) : '0'; }
+
+function balken(v) {
+  return '<div class="balken"><span class="da" style="width:' + anteil(v.da, v.gesamt) + '%"></span>' +
+    '<span class="weg" style="width:' + anteil(v.raus - v.da, v.gesamt) + '%"></span></div>';
+}
+function stueck(n, gesamt) { return n + '/' + gesamt + ' 张'; }
+
+function listeHtml(vs) {
+  return '<table><thead><tr><th>KW</th><th>清单</th><th></th><th>出货</th><th>已到</th></tr></thead><tbody>' +
+    vs.map(function (v) {
+      var fertig = v.gesamt > 0 && v.da === v.gesamt;
+      return '<tr data-vid="' + esc(v.vid) + '"' + (fertig ? ' class="fertig"' : '') + '>' +
+        '<td>KW' + esc(v.kw) + '</td>' +
+        '<td>' + esc(v.name) + (v.ohneAusgang ? ' <span class="warn">!</span>' : '') + '</td>' +
+        '<td>' + balken(v) + '</td>' +
+        '<td class="zahl">' + stueck(v.raus, v.gesamt) + '</td>' +
+        '<td class="zahl">' + stueck(v.da, v.gesamt) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+var ZEICHEN = { offen:'', unterwegs:'&#8594;', da:'&#10003;' };
+function zustandHtml(z) {
+  return '<span class="st ' + z.zustand + '">' + ZEICHEN[z.zustand] + '</span>' +
+    (z.ohneAusgang ? '<span class="warn">!</span>' : '');
+}
+function einheitenText(z) {
+  var mehrere = z.filialen.length > 1;
+  return z.einheiten.map(function (e) {
+    return (mehrere ? e.store + ' ' : '') + e.seq + '/' + e.total;
+  }).join(' ');
+}
+
+function tipp(z) {
+  var zeilen = z.einheiten.map(function (e) { return e.lid + '  ' + e.store + ' ' + e.seq + '/' + e.total; });
+  if (zeit(z.rausAm)) zeilen.push('出货 ' + zeit(z.rausAm));
+  if (zeit(z.daAm)) zeilen.push('到货 ' + zeit(z.daAm));
+  return zeilen.join('\n');
+}
+function detailHtml(d) {
+  return '<table><thead><tr><th>门店</th><th>托盘</th><th>单</th><th></th><th></th></tr></thead><tbody>' +
+    d.zeilen.map(function (z) {
+      var wann = z.zustand === 'da' ? z.daAm : z.zustand === 'unterwegs' ? z.rausAm : '';
+      return '<tr title="' + esc(tipp(z)) + '">' +
+        '<td>' + esc(z.filialen.join(' / ')) + '</td>' +
+        '<td class="sscc">' + esc(ssccText(z.sscc)) + '</td>' +
+        '<td>' + esc(einheitenText(z)) + '</td>' +
+        '<td>' + zustandHtml(z) + '</td>' +
+        '<td class="zahl">' + esc(tag(wann)) + '</td></tr>';
+    }).join('') + '</tbody></table>' +
+    '<div class="legende">' +
+      '<span><span class="st offen"></span>未出货</span>' +
+      '<span><span class="st unterwegs"></span>运输中</span>' +
+      '<span><span class="st da"></span>已到</span>' +
+      '<span><span class="warn">!</span> 漏扫出货</span>' +
+    '</div>';
+}
+
+var offen = null;
+var letzteListe = null;
+var laeuft = 0;
+
+function zeigen(was) {
+  show($('anmelden'), was === 'anmelden');
+  show($('liste'), was === 'liste');
+  show($('detail'), was === 'detail');
+  var drin = was !== 'anmelden';
+  show($('neu'), drin); show($('aus'), drin);
+  $('wer').textContent = drin ? cfg.who : '';
+}
+function beschaeftigt(an) {
+  laeuft += an ? 1 : -1;
+  $('neu').classList.toggle('dreht', laeuft > 0);
+  $('neu').disabled = laeuft > 0;
+}
+function melden(text) { $('meldung').textContent = text || ''; }
+
+function zeigeListe(vs) {
+  letzteListe = vs;
+  $('liste').innerHTML = listeHtml(vs);
+  zeigen('liste');
+}
+function zeigeDetail(d) {
+  $('dKw').textContent = 'KW' + d.kw;
+  $('dName').textContent = d.name;
+  $('dZahlen').textContent = '出货 ' + stueck(d.raus, d.gesamt) + '    已到 ' + stueck(d.da, d.gesamt);
+  $('dTab').innerHTML = detailHtml(d);
+  zeigen('detail');
+}
+
+function laden() {
+  var vid = offen;
+  beschaeftigt(true);
+  melden('');
+  return holen(vid ? { vid:vid } : {}).then(function (d) {
+    beschaeftigt(false);
+
+    if (vid !== offen) return;
+    if (d && d.ok) {
+      if (vid) zeigeDetail(d.verteilung); else zeigeListe(d.verteilungen || []);
+      return;
+    }
+    if (d && (d.code === 'auth' || d.code === 'forbidden')) {
+      abmelden(d.code === 'forbidden' ? '无权限' : '配对已失效');
+    } else if (d && d.code === 'unknown' && vid) {
+      history.back();
+    } else {
+      melden('连接失败');
+    }
+  }, function () {
+    beschaeftigt(false);
+    if (vid === offen) melden('连接失败');
+  });
+}
+
+function oeffnen(vid) {
+  if (!vid) return;
+  offen = vid;
+  history.pushState({ vid:vid }, '');
+  var v = (letzteListe || []).filter(function (x) { return x.vid === vid; })[0];
+  $('dKw').textContent = v ? 'KW' + v.kw : '';
+  $('dName').textContent = v ? v.name : '';
+  $('dZahlen').textContent = '';
+  $('dTab').innerHTML = '';
+  zeigen('detail');
+  laden();
+}
+
+window.addEventListener('popstate', function (e) {
+  offen = e.state && e.state.vid ? e.state.vid : null;
+  if (!cfg.tok) return;
+  if (offen) { zeigen('detail'); laden(); return; }
+  if (letzteListe) zeigeListe(letzteListe); else { zeigen('liste'); laden(); }
+});
+
+$('liste').ondblclick = function (e) {
+  var tr = e.target && e.target.closest ? e.target.closest('tr[data-vid]') : null;
+  if (tr) oeffnen(tr.dataset.vid);
+};
+$('zurueck').onclick = function () { history.back(); };
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && offen) history.back();
+});
+$('neu').onclick = function () { if (!laeuft) laden(); };
+$('aus').onclick = function () { abmelden(''); };
+
+function anmeldenZeigen(text) {
+  offen = null;
+  zeigen('anmelden');
+  show($('apiZeile'), !apiOk(cfg.api));
+  $('api').value = cfg.api || '';
+  $('code').value = '';
+  $('fehler').textContent = text || '';
+  $('apiZeichen').classList.remove('rot');
+  $('codeZeichen').classList.remove('rot');
+}
+function abmelden(text) {
+  cfg.tok = ''; cfg.who = ''; ls(cfg);
+  letzteListe = null;
+  anmeldenZeigen(text);
+}
+
+function nachKopplung(d) {
+  if (!d || !d.ok) {
+    return d && d.code === 'locked' ? '尝试次数过多，请稍后再试' :
+           d && d.code === 'toomany' ? '设备数量已达上限' : '配对码无效或已过期';
+  }
+  if (!d.rechte || d.rechte.indexOf('fortschritt') < 0) return (d.role || '?') + ' ≠ 办公室';
+  cfg.tok = d.token; cfg.who = d.who || ''; ls(cfg);
+  return '';
+}
+
+var koppeltGerade = false;
+function koppeln() {
+  if (koppeltGerade) return;
+  var api = apiOk(cfg.api) ? cfg.api : $('api').value.trim();
+  var code = $('code').value.trim().toUpperCase();
+  $('apiZeichen').classList.toggle('rot', !apiOk(api));
+  $('codeZeichen').classList.toggle('rot', apiOk(api) && !code);
+  $('fehler').textContent = '';
+  if (!apiOk(api) || !code) return;
+  cfg.api = api; ls(cfg);
+
+  koppeltGerade = true;
+  $('koppeln').disabled = true;
+  senden('pair', { code:code }).then(function (d) {
+    koppeltGerade = false;
+    $('koppeln').disabled = false;
+    var fehler = nachKopplung(d);
+    if (fehler) {
+      $('codeZeichen').classList.add('rot');
+      $('fehler').textContent = fehler;
+      return;
+    }
+    start();
+  }, function () {
+    koppeltGerade = false;
+    $('koppeln').disabled = false;
+    $('fehler').textContent = '连接失败';
+  });
+}
+$('koppeln').onclick = koppeln;
+$('code').onkeydown = function (e) { if (e.key === 'Enter') koppeln(); };
+$('code').oninput = function () { this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); };
+
+function start() {
+  if (!cfg.tok || !apiOk(cfg.api)) { anmeldenZeigen(''); return; }
+  offen = null;
+  zeigen('liste');
+  laden();
+}
+start();
+</script>
+</body>
+</html>
