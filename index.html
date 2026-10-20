@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="manifest.webmanifest">
-<title>Velten Scan</title>
+<title>go asia 货物物流</title>
 <style>  :root {
 
     --gruen:#006935; --hell:#8EC31F; --rot:#E60013;
@@ -232,7 +232,7 @@
 'use strict';
 
 var TXT = {
-  de: { title:'Velten Scan', bind:'Binden', ship:'Ausgang', stand:'Stand',
+  de: { title:'go asia 货物物流', bind:'Binden', ship:'Ausgang', stand:'Stand',
         cam:'Kamera', camOff:'Stopp', photo:'Foto', done:'Fertig', drop:'Verwerfen',
         reload:'Laden', save:'OK', code:'Code', unpair:'Abmelden',
         ready:'Bereit', newPal:'Neue Palette', saved:'Gespeichert',
@@ -254,7 +254,7 @@ var TXT = {
         recvNotShipped:'Nicht als ausgeliefert erfasst', recvUseBarcode:'Bitte Dachser-Barcode scannen',
         recvNeedNet:'Ohne Netz nur Dachser-Barcode', offlineNoCheck:'Offline - Filiale unbekannt',
         forbidden:'Keine Berechtigung', close:'Schliessen' },
-  zh: { title:'Velten 扫描', bind:'绑定', ship:'出货', stand:'进度',
+  zh: { title:'go asia 货物物流', bind:'绑定', ship:'出货', stand:'进度',
         cam:'摄像头', camOff:'停止', photo:'拍照', done:'完成', drop:'取消',
         reload:'刷新', save:'确定', code:'配对码', unpair:'解除',
         ready:'就绪', newPal:'新板', saved:'已保存',
@@ -421,7 +421,7 @@ function applyLang() {
   renderVerteilungen();
 }
 
-var LID_RE = /^T-\d{4}[A-Z]-\d{3}$/;
+var LID_RE = /^T-\d{4}[A-Z]{1,2}-\d{3}$/;
 
 function ssccCore(raw) {
   var d = String(raw == null ? '' : raw).replace(/[^0-9]/g, '');
@@ -774,7 +774,7 @@ function zeitWer(p) {
                zz(d.getHours()) + ':' + zz(d.getMinutes()));
   }
   if (p.shippedBy) teile.push(String(p.shippedBy));
-  return teile.join(' · ');
+  return teile.join(' ');
 }
 
 function palPruefen(sscc) {
@@ -827,7 +827,7 @@ function palRender() {
   $('ssccTxt').textContent = pal.sscc.replace(/(\d{4})(?=\d)/g, '$1 ');
   var wann = zeitWer(pal.info);
   $('palBanner').className = 'banner' + (pal.zustand === 'partial' ? ' teil' : '');
-  $('palBanner').textContent = raus ? t('palShipped') + (wann ? ' · ' + wann : '')
+  $('palBanner').textContent = raus ? t('palShipped') + (wann ? ' ' + wann : '')
     : pal.zustand === 'partial' ? t('palPartial') : '';
   $('lidList').innerHTML = pal.lids.map(function (l, i) {
 
@@ -1022,7 +1022,7 @@ function ausRender() {
 
   var text = '', teil = false, wann = zeitWer(a.info), offen = ausstehend(a.sscc).length;
   if (a.unbekannt) text = t('notFound');
-  else if (raus) text = t('palShipped') + (wann ? ' · ' + wann : '');
+  else if (raus) text = t('palShipped') + (wann ? ' ' + wann : '');
   else if (!a.pruefen && !a.lids.length) { text = t(a.offline ? 'offline' : 'emptyPal'); teil = a.offline; }
   else if (a.zustand === 'partial') { text = t('palPartial'); teil = true; }
   else if (offen) { text = t('pending'); teil = true; }
@@ -1055,7 +1055,7 @@ function ausBuchen() {
     scanFreigeben(a.sscc);
     if (aus === a) { aus = null; ausRender(); }
 
-    flashT(art, key, wo + ' · ' + a.lids.length);
+    flashT(art, key, wo + ' (' + a.lids.length + ')');
   }
 
   if (ausstehend(a.sscc).length) {
@@ -1187,7 +1187,7 @@ function empPruefen(c) {
     else if (c.kind === 'lid' && e.lids.length > 1) e.art = 'sammeln';
     else e.art = 'annehmen';
     empRender();
-    if (e.art === 'info') flashT('bad', 'recvElse', p.receivedStore);
+    if (e.art === 'info') flashT('bad', 'recvElse', p.receivedBy);
     else if (e.art === 'stornieren') flashT('warn', 'recvUndoAsk');
     else flash(e.art === 'annehmen' ? 'ok' : '', splitMulti(e.store).join(' / ') || '–',
                e.art === 'sammeln' ? empStand(e) : e.lids.length + '');
@@ -1215,9 +1215,9 @@ function empRender() {
 
   var text = '', teil = false;
   if (e.art === 'info') {
-    text = t('recvElse') + ': ' + (p.receivedStore || '') + (kurzZeit(p.receivedAt) ? ' · ' + kurzZeit(p.receivedAt) : '');
+    text = t('recvElse') + ': ' + (p.receivedBy || '') + (kurzZeit(p.receivedAt) ? ' ' + kurzZeit(p.receivedAt) : '');
   } else if (e.art === 'stornieren') {
-    text = t('recvUndoAsk') + (kurzZeit(p.receivedAt) ? ' · ' + kurzZeit(p.receivedAt) : '');
+    text = t('recvUndoAsk') + (kurzZeit(p.receivedAt) ? ' ' + kurzZeit(p.receivedAt) : '');
     teil = true;
   } else if (e.offline) {
     text = t('offlineNoCheck'); teil = true;
@@ -1310,14 +1310,17 @@ function filialenHtml(liste) {
   }).join('') + '</div>';
 }
 
+function vidVergleich(a, b) {
+  a = String(a); b = String(b);
+  return a.slice(0, 4).localeCompare(b.slice(0, 4)) || a.length - b.length || a.localeCompare(b);
+}
+
 function renderVerteilungen() {
   var el = $('vList');
   if (!el) return;
   var nachV = {};
   (cache.labels || []).forEach(function (l) { (nachV[l.vid] = nachV[l.vid] || []).push(l); });
-  var vs = (cache.verteilungen || []).slice().sort(function (a, b) {
-    return String(a.vid).localeCompare(String(b.vid));
-  });
+  var vs = (cache.verteilungen || []).slice().sort(function (a, b) { return vidVergleich(a.vid, b.vid); });
   el.innerHTML = vs.map(function (v) {
     var liste = nachV[v.vid] || [], n = liste.length, raus = 0, geb = 0;
     liste.forEach(function (l) {
