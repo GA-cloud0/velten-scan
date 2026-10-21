@@ -126,6 +126,15 @@
   .fz.offen .zahl { color:var(--warn); }
   .chip { font-size:12px; font-weight:700; padding:2px 7px; border-radius:99px;
     background:#fff2dc; color:var(--warn); border:1px solid #f0d7a8; }
+
+  .zweit { text-align:center; font-size:17px; font-weight:700; margin:-2px 0 4px; word-break:break-word; }
+  .zweit:empty { display:none; }
+
+  #recvBox.voll { position:fixed; inset:0; z-index:20; background:var(--bg); overflow-y:auto;
+    display:flex; flex-direction:column; padding:calc(12px + env(safe-area-inset-top,0)) 12px
+    calc(12px + env(safe-area-inset-bottom,0)); }
+  #recvBox.voll .big { flex:1 0 auto; display:flex; align-items:center; justify-content:center;
+    line-height:1.05; margin-top:0; }
 </style>
 </head>
 <body>
@@ -161,8 +170,8 @@
   <div id="flash"><div class="a"></div><div class="b"></div></div>
 
   <nav id="nav">
-    <button data-mode="bind" class="sel" data-t="bind">Binden</button>
-    <button data-mode="ship" data-t="ship">Ausgang</button>
+    <button data-mode="pick" class="sel" data-t="pick">Picken</button>
+    <button data-mode="bind" data-t="bind">Ausgang</button>
     <button data-mode="stand" data-t="stand">Stand</button>
     <button data-mode="recv" data-t="recv">Eingang</button>
   </nav>
@@ -179,7 +188,21 @@
       <div id="manHint" class="hint"></div>
     </div>
 
-    <section id="mBind">
+    <section id="mPick">
+      <div id="pickBox" class="hide">
+        <div class="big" id="pickStore">&ndash;</div>
+        <div class="zweit" id="pickCont"></div>
+        <div class="sscc" id="pickNr"></div>
+        <div id="pickBanner" class="banner"></div>
+        <div style="height:10px"></div>
+        <div class="two">
+          <button id="btnPickNo" class="b g" data-t="cancel">Abbrechen</button>
+          <button id="btnPickOk" class="b" data-t="pickConfirm">Picken buchen</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="mBind" class="hide">
       <div id="palletBox" class="hide">
         <div class="big" id="storeBig">&ndash;</div>
         <div class="sscc" id="ssccTxt"></div>
@@ -187,22 +210,8 @@
         <div id="lidList"></div>
         <div style="height:8px"></div>
         <div class="two">
-          <button id="btnCommit" class="b" data-t="done">Fertig</button>
-          <button id="btnDrop" class="b g" data-t="drop">Verwerfen</button>
-        </div>
-      </div>
-    </section>
-
-    <section id="mShip" class="hide">
-      <div id="shipBox" class="hide">
-        <div class="big" id="shipStore">&ndash;</div>
-        <div class="sscc" id="shipSscc"></div>
-        <div id="shipBanner" class="banner"></div>
-        <div id="shipList"></div>
-        <div style="height:10px"></div>
-        <div class="two">
-          <button id="btnShipNo" class="b g" data-t="cancel">Abbrechen</button>
-          <button id="btnShipOk" class="b" data-t="confirmShip">Ausgang buchen</button>
+          <button id="btnDrop" class="b g" data-t="cancel">Abbrechen</button>
+          <button id="btnCommit" class="b" data-t="confirmShip">Ausgang buchen</button>
         </div>
       </div>
     </section>
@@ -232,16 +241,16 @@
 'use strict';
 
 var TXT = {
-  de: { title:'go asia 货物物流', bind:'Binden', ship:'Ausgang', stand:'Stand',
-        cam:'Kamera', camOff:'Stopp', photo:'Foto', done:'Fertig', drop:'Verwerfen',
+  de: { title:'go asia 货物物流', pick:'Picken', bind:'Ausgang', stand:'Stand',
+        cam:'Scannen', camOff:'Stopp', photo:'Foto-Code',
         reload:'Laden', save:'OK', code:'Code', unpair:'Abmelden',
         ready:'Bereit', newPal:'Neue Palette', saved:'Gespeichert',
         already:'Schon drauf', unknown:'Unbekannt', needCode:'Erst Barcode',
         otherStore:'Andere Filiale', boundElse:'Klebt schon woanders',
         check:'Pruefziffer falsch', offline:'Offline', noRead:'Nichts erkannt',
-        noCam:'Keine Kamera', reading:'…', dropped:'Verworfen', notFound:'Nicht gefunden',
+        noCam:'Scannen nicht moeglich', reading:'…', dropped:'Verworfen', notFound:'Nicht gefunden',
         needPair:'Anmelden', codeBad:'Code falsch', locked:'Gesperrt', readonly:'Nur Lesen',
-        oneShot:'Kamera nach Scan aus', unbound:'Geloest',
+        oneShot:'Nach dem Scan stoppen',
         toomany:'Zu viele Geraete an diesem Zugang',
         palShipped:'Schon ausgeliefert', palPartial:'Teilweise ausgeliefert',
         emptyPal:'Nichts gebunden', confirmShip:'Ausgang buchen', cancel:'Abbrechen',
@@ -253,17 +262,21 @@ var TXT = {
         recvUndone:'Storniert', recvElse:'Bei anderer Filiale eingegangen',
         recvNotShipped:'Nicht als ausgeliefert erfasst', recvUseBarcode:'Bitte Dachser-Barcode scannen',
         recvNeedNet:'Ohne Netz nur Dachser-Barcode', offlineNoCheck:'Offline - Filiale unbekannt',
-        forbidden:'Keine Berechtigung', close:'Schliessen' },
-  zh: { title:'go asia 货物物流', bind:'绑定', ship:'出货', stand:'进度',
-        cam:'摄像头', camOff:'停止', photo:'拍照', done:'完成', drop:'取消',
+        forbidden:'Keine Berechtigung', close:'Schliessen',
+        pickConfirm:'Picken buchen', pickUndo:'Picken stornieren', pickUndoAsk:'Schon gepickt - stornieren?',
+        pickDone:'Gepickt', pickUndone:'Picken storniert', notPicked:'Nicht gepickt', needQr:'Bitte QR scannen',
+        container:'Container', unship:'Ausgang stornieren', unshipAsk:'Schon raus - stornieren?',
+        unshipDone:'Ausgang storniert', received:'Schon angenommen:' },
+  zh: { title:'go asia 货物物流', pick:'抓货', bind:'出货', stand:'进度',
+        cam:'扫描', camOff:'停止', photo:'拍照取码',
         reload:'刷新', save:'确定', code:'配对码', unpair:'解除',
         ready:'就绪', newPal:'新板', saved:'已保存',
         already:'已在本板', unknown:'未知编号', needCode:'请先扫条码',
         otherStore:'门店不符', boundElse:'已绑其他板',
         check:'校验位错误', offline:'离线', noRead:'未识别',
-        noCam:'无摄像头', reading:'…', dropped:'已取消', notFound:'未找到',
+        noCam:'无法扫描', reading:'…', dropped:'已取消', notFound:'未找到',
         needPair:'请先配对', codeBad:'配对码错误', locked:'已锁定', readonly:'只读',
-        oneShot:'扫描后关闭摄像头', unbound:'已解绑',
+        oneShot:'扫到后自动停止扫描',
         toomany:'该通道设备数已达上限',
         palShipped:'该板已出货', palPartial:'该板部分已出货',
         emptyPal:'板上无贴纸', confirmShip:'确认出货', cancel:'取消',
@@ -275,7 +288,11 @@ var TXT = {
         recvUndone:'已撤回', recvElse:'已被其他门店接货',
         recvNotShipped:'未登记出货', recvUseBarcode:'请扫 Dachser 条码',
         recvNeedNet:'无网络时只能扫 Dachser 条码', offlineNoCheck:'离线，无法核对门店',
-        forbidden:'无权限', close:'关闭' }
+        forbidden:'无权限', close:'关闭',
+        pickConfirm:'确认抓货', pickUndo:'撤回抓货', pickUndoAsk:'已抓货，是否撤回？',
+        pickDone:'抓货完成', pickUndone:'已撤回抓货', notPicked:'未抓货', needQr:'请扫 QR',
+        container:'货柜', unship:'撤回出货', unshipAsk:'已出货，是否撤回？',
+        unshipDone:'已撤回出货', received:'门店已接货：' }
 };
 var lang = 'de';
 function t(k) { return (TXT[lang] && TXT[lang][k]) || TXT.de[k] || k; }
@@ -415,7 +432,7 @@ function applyLang() {
   if (pairBusy) $('cfgPair').innerHTML = SPINNER;
 
   palRender();
-  ausRender();
+  pickRender();
   empRender();
   paint();
   renderVerteilungen();
@@ -462,7 +479,8 @@ function mitFrist(p, ms) {
 
 var MELDUNG_FUER = { already_shipped:'palShipped', empty:'emptyPal', readonly:'readonly',
                      forbidden:'forbidden', unknown:'notFound', received_elsewhere:'recvElse',
-                     not_mine:'recvElse' };
+                     not_mine:'recvElse', bound_elsewhere:'boundElse', void:'voided',
+                     received:'received' };
 
 function darf(aktion) {
   if (cfg.rechte) return cfg.rechte.indexOf(aktion) >= 0;
@@ -534,10 +552,31 @@ function cacheVersendet(sscc) {
     if (splitMulti(l.sscc).some(function (x) { return ssccEq(x, sscc); })) l.status = '已出货';
   });
 }
+
+function cacheAbholen(lid, an, zeit) {
+  var c = byLid[lid];
+  if (!c || String(c.status) === '已出货') return;
+  c.pickedAt = an ? (c.pickedAt || zeit || new Date().toISOString()) : '';
+  if (an && c.status === '待绑定') c.status = '已抓货';
+  if (!an && c.status === '已抓货') c.status = '待绑定';
+}
+
+function cacheZurueck(sscc) {
+  (cache.labels || []).forEach(function (l) {
+    if (!splitMulti(l.sscc).some(function (x) { return ssccEq(x, sscc); })) return;
+    var rest = ssccOhne(l.sscc, sscc);
+    l.sscc = rest.join('|');
+    l.status = rest.length ? '已绑定' : (l.pickedAt ? '已抓货' : '待绑定');
+  });
+}
 function cacheAnwenden(job) {
   var b = job.body || {};
+  if (job.action === 'pickLabel') { cacheAbholen(b.lid, true, b.scannedAt); return; }
+  if (job.action === 'unpickLabel') { cacheAbholen(b.lid, false); return; }
   if (!b.sscc) return;
-  if (job.action === 'bindPallet') cacheBinden(b.sscc, b.lids || []);
+  if (job.action === 'bindShip') { cacheBinden(b.sscc, b.lids || []); cacheVersendet(b.sscc); }
+  else if (job.action === 'unshipPallet') cacheZurueck(b.sscc);
+  else if (job.action === 'bindPallet') cacheBinden(b.sscc, b.lids || []);
   else if (job.action === 'unbind') cacheLoesen(b.sscc, b.lids && b.lids.length ? b.lids : aufPalette(b.sscc));
   else if (job.action === 'shipPallet') cacheVersendet(b.sscc);
 }
@@ -545,16 +584,25 @@ function cacheAnwenden(job) {
 function ausstehend(sscc) {
   return queue.filter(function (j) { return j.body && j.body.sscc && ssccEq(j.body.sscc, sscc); });
 }
-function ausstehendRaus(sscc) {
-  return ausstehend(sscc).some(function (j) { return j.action === 'shipPallet'; });
+
+function ausstehendZustand(sscc) {
+  var z = '';
+  ausstehend(sscc).forEach(function (j) {
+    if (j.action === 'bindShip' || j.action === 'shipPallet') z = 'raus';
+    if (j.action === 'unshipPallet') z = 'zurueck';
+  });
+  return z;
 }
+function ausstehendRaus(sscc) { return ausstehendZustand(sscc) === 'raus'; }
 
 function mitAusstehenden(lids, sscc) {
   var ergebnis = lids.slice();
   ausstehend(sscc).forEach(function (j) {
     var liste = j.body.lids || [];
-    if (j.action === 'bindPallet') {
+    if (j.action === 'bindPallet' || j.action === 'bindShip') {
       liste.forEach(function (l) { if (ergebnis.indexOf(l) < 0) ergebnis.push(l); });
+    } else if (j.action === 'unshipPallet') {
+      ergebnis = [];
     } else if (j.action === 'unbind') {
       var weg = liste.length ? liste : ergebnis.slice();
       ergebnis = ergebnis.filter(function (l) {
@@ -583,10 +631,7 @@ function setNet(on) {
 function queueShow() {
   setNet(navigator.onLine !== false);
 
-  if (aus && aus.mitOffen && !aus.pruefen && !aus.sende && !ausstehend(aus.sscc).length) {
-    ausPruefen(aus, true);
-  }
-  ausRender();
+  if (pal) palRender();
 }
 
 function sync() {
@@ -638,7 +683,8 @@ function flushSchritt() {
     versuche = 0;
 
     queue.shift(); ls(K.queue, queue); setNet(true);
-    var wo = job.body && job.body.sscc ? String(job.body.sscc).slice(-6) : '';
+    var wo = job.body && job.body.sscc ? String(job.body.sscc).slice(-6) :
+             job.body && job.body.lid ? String(job.body.lid) : '';
 
     if (!d.ok) {
       abgelehnt = true;
@@ -668,7 +714,8 @@ function flushSchritt() {
       merkeFertig(nein.length ? { action:job.action, body:{ sscc:job.body.sscc,
         lids:d.results.filter(function (r) { return r.ok; }).map(function (r) { return r.lid; }) } } : job);
 
-      if (job.action === 'shipPallet') flashT('ok', 'shipDone', wo);
+      if (job.action === 'shipPallet' || job.action === 'bindShip') flashT('ok', 'shipDone', wo);
+      if (job.action === 'unshipPallet') flashT('ok', 'unshipDone', wo);
       if (job.action === 'receivePallet') flashT('ok', 'recvDone', wo);
       if (job.action === 'unreceivePallet') flashT('ok', 'recvUndone', wo);
     }
@@ -683,32 +730,31 @@ function flushSchritt() {
 window.addEventListener('online', function () { setNet(true); flush(); });
 window.addEventListener('offline', function () { setNet(false); });
 
-var mode = 'bind';
+var mode = 'pick';
 
 function modusSetzen(neu) {
 
-  if (neu !== 'bind' && pal) palCommit(true);
   mode = neu;
   scanFreigeben();
   Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (x) {
     x.classList.toggle('sel', x.dataset.mode === neu);
   });
+  show($('mPick'), mode === 'pick');
   show($('mBind'), mode === 'bind');
-  show($('mShip'), mode === 'ship');
   show($('mStand'), mode === 'stand');
   show($('mRecv'), mode === 'recv');
 
   show($('scanBox'), mode !== 'stand');
   if (mode === 'stand' && stream) stopCam();
 
-  if (mode !== 'ship' && aus && !aus.sende) { aus = null; ausRender(); }
+  if (mode !== 'pick' && pk) { pk = null; pickRender(); }
   if (mode !== 'recv' && emp && !emp.sende) { emp = null; empRender(); }
   flashT('', mode);
   if (mode === 'stand') sync();
 }
 
 function reiterRichten() {
-  var sicht = { bind:darf('bindPallet'), ship:darf('shipPallet'),
+  var sicht = { pick:darf('pickLabel'), bind:darf('bindShip'),
                 stand:darf('sync'), recv:darf('receivePallet') };
   var erlaubt = [];
   Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
@@ -726,6 +772,11 @@ function reiterRichten() {
 Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
   b.onclick = function () { modusSetzen(b.dataset.mode); };
 });
+
+function listenName(vid) {
+  var v = (cache.verteilungen || []).filter(function (x) { return x.vid === vid; })[0];
+  return v ? String(v.name || '') : '';
+}
 
 var pal = null;
 
@@ -750,6 +801,11 @@ function palZustand(lids) {
 function zustandAus(status) {
   var st = String(status);
   return st === '已出货' ? 'shipped' : st === '部分出货' ? 'partial' : '';
+}
+
+function palZustandMit(sscc, sonst) {
+  var z = ausstehendZustand(sscc);
+  return z === 'raus' ? 'shipped' : z === 'zurueck' ? '' : sonst;
 }
 
 function zeileAus(lid) {
@@ -777,42 +833,33 @@ function zeitWer(p) {
   return teile.join(' ');
 }
 
-function palPruefen(sscc) {
+function palNeu(p) {
+  return p.lids.filter(function (l) { return !l.alt; });
+}
 
+function palPruefen(sscc) {
   var mein = pal;
   return mitFrist(apiGet('lookup', { q:sscc }), 10000).then(function (d) {
-    if (!d || !d.ok || !d.found || !d.pallet) return;
-
-    var neu = ausstehendRaus(sscc) ? 'shipped' : zustandAus(d.pallet.status);
-    if (pal !== mein) {
-
-      if (zustandAus(d.pallet.status) === 'shipped' && mode === 'bind' &&
-          ausstehend(sscc).some(function (j) { return j.action === 'bindPallet'; })) {
-        flashT('bad', 'palShipped', String(sscc).slice(-6));
-      }
-      return;
-    }
+    if (pal !== mein || !d || !d.ok || !d.found || !d.pallet) return;
     pal.info = d.pallet;
-    if (neu === 'shipped' && pal.zustand !== 'shipped') {
+    var neu = palZustandMit(sscc, zustandAus(d.pallet.status));
+    var vorher = pal.zustand;
+    if (neu === 'shipped' && vorher !== 'shipped') {
 
-      var verworfen = pal.lids.filter(function (l) { return !l.alt; }).length;
+      var verworfen = palNeu(pal).length;
       pal.lids = mitAusstehenden(d.pallet.lids || [], sscc).map(zeileAus);
-      pal.weg = [];
       pal.zustand = 'shipped';
       palRender();
-      if (mode === 'bind') flashT('bad', 'palShipped', verworfen ? '\u2212' + verworfen : '');
+      if (mode === 'bind') flashT('warn', 'unshipAsk', verworfen ? '−' + verworfen : '');
       return;
     }
-    var vorher = pal.zustand;
+    if (neu !== 'shipped' && vorher === 'shipped') {
+
+      pal.lids = mitAusstehenden(d.pallet.lids || [], sscc).map(zeileAus);
+      scanFreigeben(sscc);
+    }
     pal.zustand = neu;
     palRender();
-    if (mode === 'bind' && vorher !== neu) {
-      if (neu === 'partial') flashT('warn', 'newPal', '', 'palPartial');
-
-      else if (vorher === 'shipped') flashT('ok', 'newPal', String(sscc).slice(-6));
-    }
-
-    if (vorher === 'shipped' && neu !== 'shipped') scanFreigeben(sscc);
   }).catch(function () {});
 }
 
@@ -820,59 +867,106 @@ function palRender() {
   show($('palletBox'), !!pal);
   if (!pal) return;
   var raus = pal.zustand === 'shipped';
+  var info = pal.info || {}, angenommen = raus && !!info.receivedAt;
   var namen = filialenVon(pal.lids);
-  if (!namen.length && pal.info && pal.info.store) namen = splitMulti(pal.info.store);
+  if (!namen.length && info.store) namen = splitMulti(info.store);
   $('storeBig').textContent = namen.length ? namen.join(' / ') : '–';
   $('storeBig').className = 'big' + (raus ? ' versendet' : '');
   $('ssccTxt').textContent = pal.sscc.replace(/(\d{4})(?=\d)/g, '$1 ');
-  var wann = zeitWer(pal.info);
-  $('palBanner').className = 'banner' + (pal.zustand === 'partial' ? ' teil' : '');
-  $('palBanner').textContent = raus ? t('palShipped') + (wann ? ' ' + wann : '')
-    : pal.zustand === 'partial' ? t('palPartial') : '';
+  var wann = zeitWer(info), offen = ausstehend(pal.sscc).length;
+  var text = '', teil = false;
+  if (angenommen) text = t('received') + ' ' + (info.receivedBy || '') + (kurzZeit(info.receivedAt) ? ' ' + kurzZeit(info.receivedAt) : '');
+  else if (raus) { text = t('unshipAsk') + (wann ? ' ' + wann : ''); teil = true; }
+  else if (pal.zustand === 'partial') { text = t('palPartial'); teil = true; }
+  else if (offen) { text = t('pending'); teil = true; }
+  $('palBanner').className = 'banner' + (teil ? ' teil' : '');
+  $('palBanner').textContent = text;
   $('lidList').innerHTML = pal.lids.map(function (l, i) {
 
-    var fest = raus || (l.alt && l.gesperrt);
+    var fest = raus || l.alt;
+    var liste = listenName(l.vid);
     return '<div class="row' + (l.alt ? ' alt' : '') + (l.gesperrt ? ' raus' : '') + '">' +
       '<span class="g"><span class="m">' + esc(l.lid) + '</span>' +
-      (l.store ? '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) + '</div>' : '') +
+      (l.store ? '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) +
+                 (liste ? ' ' + esc(liste) : '') + '</div>' : '') +
       '</span>' + (fest ? '' : '<span class="x" data-rm="' + i + '">&times;</span>') + '</div>';
   }).join('');
   Array.prototype.forEach.call($('lidList').querySelectorAll('[data-rm]'), function (x) {
     x.onclick = function () {
       var i = Number(x.dataset.rm), l = pal.lids[i];
-      if (!l) return;
-
-      if (pal.zustand === 'shipped' || (l.alt && l.gesperrt)) { flashT('bad', 'palShipped', l.lid); return; }
-      if (!darf('unbind')) { flashT('bad', 'forbidden'); return; }
+      if (!l || l.alt || pal.sende) return;
       pal.lids.splice(i, 1);
-
-      if (l.alt) pal.weg.push(l.lid);
+      scanFreigeben();
       palRender();
     };
   });
+  var ok = $('btnCommit');
+  if (raus) {
+    show(ok, !angenommen && darf('unshipPallet'));
+    ok.className = 'b rot';
+    ok.disabled = !!pal.sende;
+    ok.innerHTML = pal.sende ? SPINNER : esc(t('unship'));
+  } else {
+    show(ok, darf('bindShip'));
+    ok.className = 'b';
+    ok.disabled = !!pal.sende || !pal.lids.length;
+    ok.innerHTML = pal.sende ? SPINNER : esc(t('confirmShip'));
+  }
+  $('btnDrop').textContent = t(raus ? 'close' : 'cancel');
 }
-function palCommit(silent) {
-  if (!pal) return;
-  var weg = pal.weg || [];
-  var neu = pal.lids.filter(function (l) { return !l.alt; })
-                    .map(function (l) { return l.lid; });
 
-  if (!neu.length && !weg.length) { pal = null; palRender(); return; }
+function palBuchen() {
+  var p = pal;
+  if (!p || p.sende) return Promise.resolve();
+  var raus = p.zustand === 'shipped';
+  if (!raus && !p.lids.length) return Promise.resolve();
+  var aktion = raus ? 'unshipPallet' : 'bindShip';
+  var body = raus ? { sscc:p.sscc } : { sscc:p.sscc, lids:palNeu(p).map(function (l) { return l.lid; }) };
+  var wo = p.sscc.slice(-6), n = p.lids.length;
+  var ungepickt = raus ? [] : p.lids.filter(function (l) { return !gepickt(l.lid); });
+  function erledigt(art, key, zusatz) {
+    cacheAnwenden({ action:aktion, body:body });
+    ls(K.cache, cache); reindex();
+    scanFreigeben([p.sscc].concat(p.lids.map(function (l) { return l.lid; })));
+    if (pal === p) { pal = null; palRender(); }
+    flashT(art, key, wo + (raus ? '' : ' (' + n + ')') + (zusatz || ''));
+  }
+  var hinweis = ungepickt.length ? '  ' + t('notPicked') + ' ' + ungepickt.length : '';
+  if (navigator.onLine === false || ausstehend(p.sscc).length) {
+    enqueue({ action:aktion, body:body });
+    erledigt('warn', 'queued', hinweis);
+    return Promise.resolve();
+  }
+  p.sende = true; palRender();
+  return mitFrist(apiPost(aktion, body), 15000).then(function (d) {
+    if (d && d.ok) {
+      erledigt(hinweis ? 'warn' : 'ok', raus ? 'unshipDone' : 'shipDone', hinweis);
+      sync();
+      return;
+    }
+    p.sende = false;
+    if (d && d.pallet && pal === p) {
 
-  if (weg.length) {
-    enqueue({ action:'unbind', body:{ sscc:pal.sscc, lids:weg } });
-    cacheLoesen(pal.sscc, weg);
-  }
-  if (neu.length) {
-    enqueue({ action:'bindPallet', body:{ sscc:pal.sscc, lids:neu } });
-    cacheBinden(pal.sscc, neu);
-  }
-  ls(K.cache, cache); reindex();
-  if (!silent) {
-    if (neu.length) flashT('ok', 'saved', neu.length + (weg.length ? ' −' + weg.length : ''));
-    else flashT('ok', 'unbound', weg.length + '');
-  }
-  pal = null; palRender();
+      p.info = d.pallet;
+      if (d.code === 'already_shipped') {
+        p.lids = mitAusstehenden(d.pallet.lids || [], p.sscc).map(zeileAus);
+        p.zustand = 'shipped';
+      }
+    }
+    if (pal === p) palRender();
+    var welche = d && d.results ? ' ' + d.results.map(function (r) { return r.lid; }).join(' ') : '';
+    if (d && MELDUNG_FUER[d.code]) flashT('bad', MELDUNG_FUER[d.code], wo + welche);
+    else if (!d || d.code !== 'auth') flash('bad', (d && (d.error || d.code)) || '', wo);
+  }, function () {
+    enqueue({ action:aktion, body:body });
+    erledigt('warn', 'queued', hinweis);
+  });
+}
+
+function palAbbrechen() {
+  if (!pal || pal.sende) return;
+  scanFreigeben([pal.sscc].concat(pal.lids.map(function (l) { return l.lid; })));
+  pal = null; palRender(); flashT('', 'dropped');
 }
 
 var lastText = '', lastAt = 0;
@@ -900,7 +994,7 @@ function onScan(text) {
   if (!c.kind) { flashT('bad', 'noRead'); return; }
 
   if (cfg.oneShot && stream) stopCam();
-  if (mode === 'ship') return doShip(c);
+  if (mode === 'pick') return doPick(c);
   if (mode === 'recv') return doRecv(c);
   return doBind(c);
 }
@@ -908,13 +1002,13 @@ function onScan(text) {
 function doBind(c) {
   if (c.kind === 'sscc') {
     if (pal && ssccEq(pal.sscc, c.value)) { flashT('warn', 'already'); return; }
-    if (pal) palCommit(true);
-    var vorhanden = palVorhanden(c.value);
 
-    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, weg:[],
-            zustand:ausstehendRaus(c.value) ? 'shipped' : palZustand(vorhanden), info:null };
+    if (pal && (pal.sende || palNeu(pal).length)) { flashT('warn', 'shipBusy', pal.sscc.slice(-6)); return; }
+    var vorhanden = palVorhanden(c.value);
+    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null, sende:false,
+            zustand:palZustandMit(c.value, palZustand(vorhanden)) };
     palRender();
-    if (pal.zustand === 'shipped') flashT('bad', 'palShipped');
+    if (pal.zustand === 'shipped') flashT('warn', 'unshipAsk', c.value.slice(-6));
     else if (pal.zustand === 'partial') flashT('warn', 'newPal', '', 'palPartial');
     else if (c.checkOk) flashT('ok', 'newPal', c.value.slice(-6));
     else flashT('warn', 'newPal', '', 'check');
@@ -923,21 +1017,12 @@ function doBind(c) {
   }
   if (!pal) { flashT('bad', 'needCode'); return; }
 
-  if (!darf('bindPallet')) { flashT('bad', 'forbidden'); return; }
+  if (!darf('bindShip')) { flashT('bad', 'forbidden'); return; }
+  if (pal.sende) return;
 
   if (pal.zustand === 'shipped') { flashT('bad', 'palShipped'); return; }
   var l = byLid[c.value];
   if (!l) { flashT('bad', 'unknown', c.value); return; }
-
-  var wi = pal.weg.indexOf(c.value);
-  if (wi >= 0) {
-    pal.weg.splice(wi, 1);
-    pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid,
-                    alt:true, shipped:rausHier(l), gesperrt:String(l.status) === '已出货' });
-    palRender();
-    flash('ok', l.store, l.seq + '/' + l.total);
-    return;
-  }
   if (pal.lids.some(function (x) { return x.lid === c.value; })) { flashT('warn', 'already'); return; }
 
   var andere = ssccOhne(l.sscc, pal.sscc);
@@ -945,143 +1030,101 @@ function doBind(c) {
   var fremd = pal.lids.filter(function (x) { return x.store !== l.store; });
   pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid });
   palRender();
+  var liste = listenName(l.vid);
   if (fremd.length) flashT('warn', 'otherStore', fremd[0].store + ' / ' + l.store);
-  else flash('ok', l.store, l.seq + '/' + l.total);
+
+  else if (!gepickt(l.lid)) flash('warn', l.store, l.seq + '/' + l.total + '  ' + t('notPicked'));
+  else flash('ok', l.store, l.seq + '/' + l.total + (liste ? '  ' + liste : ''));
 }
 
-var aus = null;
+var pk = null, pkZuletzt = null;
 
-function doShip(c) {
-  if (c.kind !== 'sscc') { flashT('bad', 'needCode'); return; }
+function pickAusstehend(lid) {
+  var letzte = '';
+  queue.forEach(function (j) {
+    if (!j.body || j.body.lid !== lid) return;
+    if (j.action === 'pickLabel') letzte = 'an';
+    if (j.action === 'unpickLabel') letzte = 'ab';
+  });
+  return letzte;
+}
+function gepickt(lid) {
+  var l = byLid[lid], unterwegs = pickAusstehend(lid);
+  if (unterwegs) return unterwegs === 'an';
+  return !!l && (!!l.pickedAt || String(l.status) === '已抓货');
+}
 
-  if (aus && ssccEq(aus.sscc, c.value)) return;
+function doPick(c) {
+  if (c.kind !== 'lid') { flashT('bad', 'needQr'); return; }
 
-  if (aus && (aus.pruefen || aus.sende || ausBereit(aus))) {
-    flashT('warn', 'shipBusy', aus.sscc.slice(-6));
-    return;
+  if (pkZuletzt && pkZuletzt.lid === c.value && Date.now() - pkZuletzt.at < EMP_SCHONFRIST) return;
+  if (pk) {
+    if (pk.lid === c.value) return;
+
+    if (pk.art !== 'info') { flashT('warn', 'shipBusy', pk.lid.slice(-6)); return; }
   }
-  var lids = palVorhanden(c.value);
-  var a = aus = { sscc:c.value, checkOk:c.checkOk, lids:lids,
-                  zustand:ausstehendRaus(c.value) ? 'shipped' : palZustand(lids),
-                  info:null, pruefen:true, sende:false, offline:false, unbekannt:false };
-  ausRender();
-  if (c.checkOk) flashT('', 'ship', c.value.slice(-6));
-  else flashT('warn', 'ship', '', 'check');
-  return ausPruefen(a);
-}
+  if (byLid[c.value]) return pickZeigen(byLid[c.value]);
 
-function ausPruefen(a, nochmal) {
-  var vorZustand = a.zustand, vorAnzahl = a.lids.length;
-  a.pruefen = true; a.offline = false; a.unbekannt = false; a.mitOffen = false;
-  ausRender();
-
-  return mitFrist(flush(), 8000).catch(function () {}).then(function () {
-    return mitFrist(apiGet('lookup', { q:a.sscc }), 10000);
-  }).then(function (d) {
-    if (aus !== a) return;
-    if (!d || !d.ok) { a.offline = true; return; }
-    if (!d.found || !d.pallet) {
-
-      if (!ausstehend(a.sscc).length) { a.unbekannt = true; a.lids = []; }
-      else a.mitOffen = true;
-      return;
-    }
-
-    a.info = d.pallet;
-    a.lids = mitAusstehenden(d.pallet.lids || [], a.sscc).map(zeileAus);
-    a.zustand = ausstehendRaus(a.sscc) ? 'shipped' : zustandAus(d.pallet.status);
-
-    a.mitOffen = ausstehend(a.sscc).length > 0;
-  }, function () {
-    if (aus === a) a.offline = true;
-  }).then(function () {
-    if (aus !== a) return;
-    a.pruefen = false;
-    ausRender();
-    if (nochmal && !a.unbekannt && a.zustand === vorZustand && a.lids.length === vorAnzahl) return;
-    if (a.unbekannt) flashT('bad', 'notFound');
-    else if (a.zustand === 'shipped') flashT('bad', 'palShipped');
-    else if (!a.lids.length) flashT('bad', a.offline ? 'offline' : 'emptyPal');
+  var lid = c.value;
+  flashT('', 'reading');
+  return sync().then(function () {
+    if (pk) return;
+    if (byLid[lid]) pickZeigen(byLid[lid]);
+    else flashT('bad', 'unknown', lid);
   });
 }
 
-function ausBereit(a) {
-  return !!a && !a.pruefen && !a.sende && !a.unbekannt && darf('shipPallet') &&
-         a.zustand !== 'shipped' && a.lids.length > 0;
+function pickZeigen(l) {
+  var art = String(l.status) === '已出货' ? 'info' : gepickt(l.lid) ? 'stornieren' : 'annehmen';
+  pk = { lid:l.lid, l:l, art:art, zeit:new Date().toISOString() };
+  pickRender();
+  if (art === 'info') flashT('bad', 'palShipped', l.lid.slice(-6));
+  else if (art === 'stornieren') flashT('warn', 'pickUndoAsk');
+  else flash('', l.store, l.seq + '/' + l.total);
 }
 
-function ausRender() {
-  show($('shipBox'), !!aus);
-  if (!aus) return;
-  var a = aus, raus = a.zustand === 'shipped';
-  var namen = filialenVon(a.lids);
-  if (!namen.length && a.info && a.info.store) namen = splitMulti(a.info.store);
-  $('shipStore').textContent = namen.length ? namen.join(' / ') : '–';
-  $('shipStore').className = 'big' + (raus ? ' versendet' : '');
-  $('shipSscc').textContent = a.sscc.replace(/(\d{4})(?=\d)/g, '$1 ');
-
-  var text = '', teil = false, wann = zeitWer(a.info), offen = ausstehend(a.sscc).length;
-  if (a.unbekannt) text = t('notFound');
-  else if (raus) text = t('palShipped') + (wann ? ' ' + wann : '');
-  else if (!a.pruefen && !a.lids.length) { text = t(a.offline ? 'offline' : 'emptyPal'); teil = a.offline; }
-  else if (a.zustand === 'partial') { text = t('palPartial'); teil = true; }
-  else if (offen) { text = t('pending'); teil = true; }
-  else if (a.offline) { text = t('offline'); teil = true; }
-
-  else if (!darf('shipPallet')) { text = t('forbidden'); teil = true; }
-  $('shipBanner').className = 'banner' + (teil ? ' teil' : '');
-  $('shipBanner').textContent = text;
-
-  $('shipList').innerHTML = a.lids.map(function (l) {
-    return '<div class="row' + (l.shipped ? ' raus' : '') + '"><span class="g">' +
-      '<span class="m">' + esc(l.lid) + '</span>' +
-      (l.store ? '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) + '</div>' : '') +
-      '</span></div>';
-  }).join('');
-
-  var ok = $('btnShipOk');
-  show(ok, !a.unbekannt && !raus && darf('shipPallet') && (a.pruefen || a.lids.length > 0));
-  ok.disabled = !ausBereit(a);
-  ok.innerHTML = (a.pruefen || a.sende) ? SPINNER : esc(t('confirmShip'));
-}
-
-function ausBuchen() {
-  var a = aus;
-  if (!ausBereit(a)) return Promise.resolve();
-  var wo = a.sscc.slice(-6);
-  function erledigt(art, key) {
-    cacheVersendet(a.sscc);
-    ls(K.cache, cache); reindex();
-    scanFreigeben(a.sscc);
-    if (aus === a) { aus = null; ausRender(); }
-
-    flashT(art, key, wo + ' (' + a.lids.length + ')');
+function pickRender() {
+  show($('pickBox'), !!pk);
+  if (!pk) return;
+  var l = pk.l, liste = listenName(l.vid);
+  $('pickStore').textContent = l.store || '–';
+  $('pickStore').className = 'big' + (pk.art === 'info' ? ' versendet' : '');
+  $('pickCont').textContent = liste ? t('container') + ' ' + liste : '';
+  $('pickNr').textContent = l.lid + '  ' + l.seq + '/' + l.total;
+  var text = '', teil = false;
+  if (pk.art === 'info') text = t('palShipped');
+  else if (pk.art === 'stornieren') {
+    text = t('pickUndoAsk') + (kurzZeit(l.pickedAt) ? ' ' + kurzZeit(l.pickedAt) : '');
+    teil = true;
   }
-
-  if (ausstehend(a.sscc).length) {
-    enqueue({ action:'shipPallet', body:{ sscc:a.sscc } });
-    erledigt('warn', 'queued');
-    return Promise.resolve();
-  }
-  a.sende = true; ausRender();
-
-  return mitFrist(apiPost('shipPallet', { sscc:a.sscc }), 15000).then(function (d) {
-    if (d && d.ok) { erledigt('ok', 'shipDone'); sync(); return; }
-    a.sende = false;
-    if (aus === a) ausRender();
-    if (d && MELDUNG_FUER[d.code]) flashT('bad', MELDUNG_FUER[d.code], wo);
-    else if (!d || d.code !== 'auth') flash('bad', (d && (d.error || d.code)) || '', wo);
-  }, function () {
-
-    enqueue({ action:'shipPallet', body:{ sscc:a.sscc } });
-    erledigt('warn', 'queued');
-  });
+  $('pickBanner').className = 'banner' + (teil ? ' teil' : '');
+  $('pickBanner').textContent = text;
+  var knopf = pk.art === 'annehmen' ? 'pickConfirm' : pk.art === 'stornieren' ? 'pickUndo' : '';
+  var ok = $('btnPickOk');
+  show(ok, !!knopf);
+  ok.className = 'b' + (pk.art === 'stornieren' ? ' rot' : '');
+  ok.textContent = t(knopf || 'pickConfirm');
+  $('btnPickNo').textContent = t(pk.art === 'info' ? 'close' : 'cancel');
 }
 
-function ausAbbrechen() {
-  if (!aus || aus.sende) return;
-  scanFreigeben(aus.sscc);
-  aus = null; ausRender(); flashT('', 'dropped');
+function pickBuchen() {
+  var p = pk;
+  if (!p || (p.art !== 'annehmen' && p.art !== 'stornieren')) return;
+  var an = p.art === 'annehmen';
+  var job = { action:an ? 'pickLabel' : 'unpickLabel', body:{ lid:p.lid, scannedAt:p.zeit } };
+  enqueue(job);
+  cacheAnwenden(job);
+  ls(K.cache, cache); reindex();
+  pkZuletzt = { lid:p.lid, at:Date.now() };
+  scanFreigeben([p.lid]);
+  pk = null; pickRender();
+  flash(an ? 'ok' : 'warn', p.l.store, t(an ? 'pickDone' : 'pickUndone') + '  ' + p.l.seq + '/' + p.l.total);
+}
+
+function pickAbbrechen() {
+  if (!pk) return;
+  scanFreigeben([pk.lid]);
+  pk = null; pickRender(); flashT('', 'dropped');
 }
 
 var emp = null;
@@ -1206,11 +1249,21 @@ function empPruefen(c) {
   });
 }
 
+function riesig(text) {
+  var woerter = String(text || '').split(/\s+/);
+  var n = Math.max(3, Math.max.apply(null, woerter.map(function (w) { return w.length; })));
+  return 'min(28vw, ' + (150 / n).toFixed(1) + 'vw)';
+}
+
 function empRender() {
+  var voll = !!emp && emp.art !== 'sammeln';
+  $('recvBox').classList.toggle('voll', voll);
   show($('recvBox'), !!emp);
   if (!emp) return;
   var e = emp, p = e.info || {};
-  $('recvStore').textContent = e.store ? splitMulti(e.store).join(' / ') : '–';
+  var name = e.store ? splitMulti(e.store).join(' / ') : '–';
+  $('recvStore').textContent = name;
+  $('recvStore').style.fontSize = voll ? riesig(name) : '';
   $('recvSscc').textContent = e.sscc ? e.sscc.replace(/(\d{4})(?=\d)/g, '$1 ') : e.code;
 
   var text = '', teil = false;
@@ -1325,7 +1378,7 @@ function renderVerteilungen() {
     var liste = nachV[v.vid] || [], n = liste.length, raus = 0, geb = 0;
     liste.forEach(function (l) {
       if (l.status === '已出货') raus++;
-      else if (l.status === '已绑定') geb++;
+      else if (l.status === '已绑定' || l.status === '已抓货') geb++;
     });
     var auf = !!standAuf[v.vid];
     return '<div class="vk' + (n && raus + geb === n ? ' fertig' : '') + '" data-vid="' + esc(v.vid) + '">' +
@@ -1463,10 +1516,10 @@ $('manual').oninput = function () {
   }
 };
 
-$('btnCommit').onclick = function () { palCommit(); };
-$('btnDrop').onclick = function () { pal = null; palRender(); flashT('', 'dropped'); };
-$('btnShipOk').onclick = function () { ausBuchen(); };
-$('btnShipNo').onclick = function () { ausAbbrechen(); };
+$('btnCommit').onclick = function () { palBuchen(); };
+$('btnDrop').onclick = function () { palAbbrechen(); };
+$('btnPickOk').onclick = function () { pickBuchen(); };
+$('btnPickNo').onclick = function () { pickAbbrechen(); };
 $('btnRecvOk').onclick = function () { empBuchen(); };
 $('btnRecvNo').onclick = function () { empAbbrechen(); };
 
