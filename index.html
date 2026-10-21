@@ -109,8 +109,8 @@
   .vk-kopf { display:flex; align-items:baseline; gap:7px; }
   .vk-kopf .pf { color:var(--dim); font-size:13px; width:12px; }
   .vk-kopf .m { font-family:ui-monospace,Menlo,monospace; font-weight:700; }
-  .vk-kopf .zahl { margin-left:auto; font-weight:800; font-size:17px; }
-  .vk.fertig .vk-kopf .zahl { color:var(--gruen); }
+  .vk-kopf .zahlen { margin-left:auto; display:flex; gap:12px; }
+  .vk-kopf .zahl { font-weight:800; font-size:15px; white-space:nowrap; }
   .vk .s { color:var(--dim); font-size:13px; margin:1px 0 0 19px; word-break:break-word; }
   .balken { display:flex; height:8px; border-radius:99px; background:var(--line);
     overflow:hidden; margin-top:8px; }
@@ -122,8 +122,9 @@
     font-size:15px; border-bottom:1px solid var(--line); }
   .fz:last-child { border-bottom:0; }
   .fz .g { flex:1; min-width:40%; word-break:break-word; }
-  .fz .zahl { font-weight:700; color:var(--dim); }
+  .fz .zahl { font-weight:700; color:var(--dim); white-space:nowrap; }
   .fz.offen .zahl { color:var(--warn); }
+  .vk .zahl.voll { color:var(--gruen); }
   .chip { font-size:12px; font-weight:700; padding:2px 7px; border-radius:99px;
     background:#fff2dc; color:var(--warn); border:1px solid #f0d7a8; }
 
@@ -1299,6 +1300,18 @@ var standAuf = {};
 
 function prozent(a, n) { return n ? Math.round(a / n * 1000) / 10 : 0; }
 
+function standZahlen(liste) {
+  var raus = 0, gepickt = 0;
+  liste.forEach(function (l) {
+    if (l.status === '已出货') raus++;
+    if (l.status !== '待绑定') gepickt++;
+  });
+  return { n: liste.length, raus: raus, gepickt: gepickt };
+}
+function zahlHtml(key, a, n) {
+  return '<span class="zahl' + (n && a === n ? ' voll' : '') + '">' + esc(t(key)) + ' ' + a + '/' + n + '</span>';
+}
+
 function filialenHtml(liste) {
   var f = {};
   liste.forEach(function (l) { (f[l.store] = f[l.store] || []).push(l); });
@@ -1310,10 +1323,10 @@ function filialenHtml(liste) {
   });
   return '<div class="fil">' + namen.map(function (name) {
     var z = f[name].slice().sort(function (a, b) { return Number(a.seq) - Number(b.seq); });
-    var los = z.filter(offen);
+    var los = z.filter(offen), zahlen = standZahlen(z);
     return '<div class="fz' + (los.length ? ' offen' : '') + '"><span class="g">' + esc(name) + '</span>' +
       los.map(function (l) { return '<span class="chip">' + esc(l.seq) + '/' + esc(l.total) + '</span>'; }).join('') +
-      '<span class="zahl">' + (z.length - los.length) + '/' + z.length + '</span></div>';
+      zahlHtml('pick', zahlen.gepickt, zahlen.n) + zahlHtml('bind', zahlen.raus, zahlen.n) + '</div>';
   }).join('') + '</div>';
 }
 
@@ -1329,19 +1342,15 @@ function renderVerteilungen() {
   (cache.labels || []).forEach(function (l) { (nachV[l.vid] = nachV[l.vid] || []).push(l); });
   var vs = (cache.verteilungen || []).slice().sort(function (a, b) { return vidVergleich(a.vid, b.vid); });
   el.innerHTML = vs.map(function (v) {
-    var liste = nachV[v.vid] || [], n = liste.length, raus = 0, geb = 0;
-    liste.forEach(function (l) {
-      if (l.status === '已出货') raus++;
-      else if (l.status === '已绑定' || l.status === '已抓货') geb++;
-    });
+    var liste = nachV[v.vid] || [], z = standZahlen(liste), n = z.n;
     var auf = !!standAuf[v.vid];
-    return '<div class="vk' + (n && raus + geb === n ? ' fertig' : '') + '" data-vid="' + esc(v.vid) + '">' +
+    return '<div class="vk" data-vid="' + esc(v.vid) + '">' +
       '<div class="vk-kopf"><span class="pf">' + (auf ? '&#9662;' : '&#9656;') + '</span>' +
       '<span class="m">' + esc(v.vid) + '</span>' +
-      '<span class="zahl">' + (raus + geb) + '/' + n + '</span></div>' +
+      '<span class="zahlen">' + zahlHtml('pick', z.gepickt, n) + zahlHtml('bind', z.raus, n) + '</span></div>' +
       '<div class="s">' + esc(v.name) + '</div>' +
-      '<div class="balken"><i class="raus" style="width:' + prozent(raus, n) + '%"></i>' +
-      '<i class="geb" style="width:' + prozent(geb, n) + '%"></i></div>' +
+      '<div class="balken"><i class="raus" style="width:' + prozent(z.raus, n) + '%"></i>' +
+      '<i class="geb" style="width:' + prozent(z.gepickt - z.raus, n) + '%"></i></div>' +
       (auf ? filialenHtml(liste) : '') + '</div>';
   }).join('');
   Array.prototype.forEach.call(el.querySelectorAll('[data-vid]'), function (k) {
