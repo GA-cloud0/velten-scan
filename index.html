@@ -142,7 +142,6 @@
 <header>
   <img id="logo" src="logo.png" alt="go asia">
   <span class="sp"></span>
-  <span id="cnt" class="tag"></span>
   <span id="who" class="tag"></span>
   <span id="net" class="tag"></span>
   <button id="lang">DE</button>
@@ -218,6 +217,7 @@
     <section id="mStand" class="hide"><div id="vList"></div></section>
     <section id="mRecv" class="hide">
       <div id="recvBox" class="hide">
+        <div class="zweit" id="recvCont"></div>
         <div class="big" id="recvStore">&ndash;</div>
         <div class="sscc" id="recvSscc"></div>
         <div id="recvBanner" class="banner"></div>
@@ -249,9 +249,8 @@ var TXT = {
         otherStore:'Andere Filiale', boundElse:'Klebt schon woanders',
         check:'Pruefziffer falsch', offline:'Offline', noRead:'Nichts erkannt',
         noCam:'Scannen nicht moeglich', reading:'…', dropped:'Verworfen', notFound:'Nicht gefunden',
-        needPair:'Anmelden', codeBad:'Code falsch', locked:'Gesperrt', readonly:'Nur Lesen',
+        needPair:'Anmelden', pairFail:'Kopplung fehlgeschlagen', readonly:'Nur Lesen',
         oneShot:'Nach dem Scan stoppen',
-        toomany:'Zu viele Geraete an diesem Zugang',
         palShipped:'Schon ausgeliefert', palPartial:'Teilweise ausgeliefert',
         emptyPal:'Nichts gebunden', confirmShip:'Ausgang buchen', cancel:'Abbrechen',
         shipDone:'Ausgang gebucht', queued:'Wird gesendet',
@@ -265,7 +264,7 @@ var TXT = {
         forbidden:'Keine Berechtigung', close:'Schliessen',
         pickConfirm:'Picken buchen', pickUndo:'Picken stornieren', pickUndoAsk:'Schon gepickt - stornieren?',
         pickDone:'Gepickt', pickUndone:'Picken storniert', notPicked:'Nicht gepickt', needQr:'Bitte QR scannen',
-        container:'Container', unship:'Ausgang stornieren', unshipAsk:'Schon raus - stornieren?',
+        shipped:'Ausgeliefert', unship:'Ausgang stornieren',
         unshipDone:'Ausgang storniert', received:'Schon angenommen:' },
   zh: { title:'go asia 货物物流', pick:'抓货', bind:'出货', stand:'进度',
         cam:'扫描', camOff:'停止', photo:'拍照取码',
@@ -275,9 +274,8 @@ var TXT = {
         otherStore:'门店不符', boundElse:'已绑其他板',
         check:'校验位错误', offline:'离线', noRead:'未识别',
         noCam:'无法扫描', reading:'…', dropped:'已取消', notFound:'未找到',
-        needPair:'请先配对', codeBad:'配对码错误', locked:'已锁定', readonly:'只读',
+        needPair:'请先配对', pairFail:'配对失败', readonly:'只读',
         oneShot:'扫到后自动停止扫描',
-        toomany:'该通道设备数已达上限',
         palShipped:'该板已出货', palPartial:'该板部分已出货',
         emptyPal:'板上无贴纸', confirmShip:'确认出货', cancel:'取消',
         shipDone:'出货完成', queued:'待发送',
@@ -291,7 +289,7 @@ var TXT = {
         forbidden:'无权限', close:'关闭',
         pickConfirm:'确认抓货', pickUndo:'撤回抓货', pickUndoAsk:'已抓货，是否撤回？',
         pickDone:'抓货完成', pickUndone:'已撤回抓货', notPicked:'未抓货', needQr:'请扫 QR',
-        container:'货柜', unship:'撤回出货', unshipAsk:'已出货，是否撤回？',
+        shipped:'已出货', unship:'撤回出货',
         unshipDone:'已撤回出货', received:'门店已接货：' }
 };
 var lang = 'de';
@@ -616,9 +614,6 @@ function mitAusstehenden(lids, sscc) {
 function reindex() {
   byLid = {};
   (cache.labels || []).forEach(function (l) { byLid[l.lid] = l; });
-  var n = (cache.labels || []).length;
-  var offen = (cache.labels || []).filter(function (l) { return l.status === '待绑定'; }).length;
-  $('cnt').textContent = n ? (n - offen) + '/' + n : '';
   renderVerteilungen();
 }
 
@@ -714,8 +709,7 @@ function flushSchritt() {
       merkeFertig(nein.length ? { action:job.action, body:{ sscc:job.body.sscc,
         lids:d.results.filter(function (r) { return r.ok; }).map(function (r) { return r.lid; }) } } : job);
 
-      if (job.action === 'shipPallet' || job.action === 'bindShip') flashT('ok', 'shipDone', wo);
-      if (job.action === 'unshipPallet') flashT('ok', 'unshipDone', wo);
+      if (job.action === 'shipPallet') flashT('ok', 'shipDone', wo);
       if (job.action === 'receivePallet') flashT('ok', 'recvDone', wo);
       if (job.action === 'unreceivePallet') flashT('ok', 'recvUndone', wo);
     }
@@ -765,7 +759,6 @@ function reiterRichten() {
   show($('nav'), erlaubt.length > 1);
 
   show($('btnSync'), sicht.stand);
-  show($('cnt'), sicht.stand);
   if (erlaubt.length && erlaubt.indexOf(mode) < 0) modusSetzen(erlaubt[0]);
 }
 
@@ -821,18 +814,6 @@ function filialenVon(lids) {
   return Object.keys(st);
 }
 
-function zeitWer(p) {
-  if (!p) return '';
-  var teile = [], d = p.shippedAt ? new Date(p.shippedAt) : null;
-  if (d && !isNaN(d.getTime())) {
-    var zz = function (x) { return ('0' + x).slice(-2); };
-    teile.push(zz(d.getDate()) + '.' + zz(d.getMonth() + 1) + ' ' +
-               zz(d.getHours()) + ':' + zz(d.getMinutes()));
-  }
-  if (p.shippedBy) teile.push(String(p.shippedBy));
-  return teile.join(' ');
-}
-
 function palNeu(p) {
   return p.lids.filter(function (l) { return !l.alt; });
 }
@@ -850,7 +831,7 @@ function palPruefen(sscc) {
       pal.lids = mitAusstehenden(d.pallet.lids || [], sscc).map(zeileAus);
       pal.zustand = 'shipped';
       palRender();
-      if (mode === 'bind') flashT('warn', 'unshipAsk', verworfen ? '−' + verworfen : '');
+      if (mode === 'bind') flashT('warn', 'shipped', verworfen ? '−' + verworfen : '');
       return;
     }
     if (neu !== 'shipped' && vorher === 'shipped') {
@@ -873,10 +854,11 @@ function palRender() {
   $('storeBig').textContent = namen.length ? namen.join(' / ') : '–';
   $('storeBig').className = 'big' + (raus ? ' versendet' : '');
   $('ssccTxt').textContent = pal.sscc.replace(/(\d{4})(?=\d)/g, '$1 ');
-  var wann = zeitWer(info), offen = ausstehend(pal.sscc).length;
+  var offen = ausstehend(pal.sscc).length;
   var text = '', teil = false;
+
   if (angenommen) text = t('received') + ' ' + (info.receivedBy || '') + (kurzZeit(info.receivedAt) ? ' ' + kurzZeit(info.receivedAt) : '');
-  else if (raus) { text = t('unshipAsk') + (wann ? ' ' + wann : ''); teil = true; }
+  else if (raus) text = '';
   else if (pal.zustand === 'partial') { text = t('palPartial'); teil = true; }
   else if (offen) { text = t('pending'); teil = true; }
   $('palBanner').className = 'banner' + (teil ? ' teil' : '');
@@ -894,7 +876,7 @@ function palRender() {
   Array.prototype.forEach.call($('lidList').querySelectorAll('[data-rm]'), function (x) {
     x.onclick = function () {
       var i = Number(x.dataset.rm), l = pal.lids[i];
-      if (!l || l.alt || pal.sende) return;
+      if (!l || l.alt) return;
       pal.lids.splice(i, 1);
       scanFreigeben();
       palRender();
@@ -904,67 +886,39 @@ function palRender() {
   if (raus) {
     show(ok, !angenommen && darf('unshipPallet'));
     ok.className = 'b rot';
-    ok.disabled = !!pal.sende;
-    ok.innerHTML = pal.sende ? SPINNER : esc(t('unship'));
+    ok.disabled = false;
+    ok.textContent = t('unship');
   } else {
     show(ok, darf('bindShip'));
     ok.className = 'b';
-    ok.disabled = !!pal.sende || !pal.lids.length;
-    ok.innerHTML = pal.sende ? SPINNER : esc(t('confirmShip'));
+    ok.disabled = !pal.lids.length;
+    ok.textContent = t('confirmShip');
   }
   $('btnDrop').textContent = t(raus ? 'close' : 'cancel');
 }
 
 function palBuchen() {
   var p = pal;
-  if (!p || p.sende) return Promise.resolve();
+  if (!p) return;
   var raus = p.zustand === 'shipped';
-  if (!raus && !p.lids.length) return Promise.resolve();
-  var aktion = raus ? 'unshipPallet' : 'bindShip';
-  var body = raus ? { sscc:p.sscc } : { sscc:p.sscc, lids:palNeu(p).map(function (l) { return l.lid; }) };
-  var wo = p.sscc.slice(-6), n = p.lids.length;
-  var ungepickt = raus ? [] : p.lids.filter(function (l) { return !gepickt(l.lid); });
-  function erledigt(art, key, zusatz) {
-    cacheAnwenden({ action:aktion, body:body });
-    ls(K.cache, cache); reindex();
-    scanFreigeben([p.sscc].concat(p.lids.map(function (l) { return l.lid; })));
-    if (pal === p) { pal = null; palRender(); }
-    flashT(art, key, wo + (raus ? '' : ' (' + n + ')') + (zusatz || ''));
-  }
-  var hinweis = ungepickt.length ? '  ' + t('notPicked') + ' ' + ungepickt.length : '';
-  if (navigator.onLine === false || ausstehend(p.sscc).length) {
-    enqueue({ action:aktion, body:body });
-    erledigt('warn', 'queued', hinweis);
-    return Promise.resolve();
-  }
-  p.sende = true; palRender();
-  return mitFrist(apiPost(aktion, body), 15000).then(function (d) {
-    if (d && d.ok) {
-      erledigt(hinweis ? 'warn' : 'ok', raus ? 'unshipDone' : 'shipDone', hinweis);
-      sync();
-      return;
-    }
-    p.sende = false;
-    if (d && d.pallet && pal === p) {
-
-      p.info = d.pallet;
-      if (d.code === 'already_shipped') {
-        p.lids = mitAusstehenden(d.pallet.lids || [], p.sscc).map(zeileAus);
-        p.zustand = 'shipped';
-      }
-    }
-    if (pal === p) palRender();
-    var welche = d && d.results ? ' ' + d.results.map(function (r) { return r.lid; }).join(' ') : '';
-    if (d && MELDUNG_FUER[d.code]) flashT('bad', MELDUNG_FUER[d.code], wo + welche);
-    else if (!d || d.code !== 'auth') flash('bad', (d && (d.error || d.code)) || '', wo);
-  }, function () {
-    enqueue({ action:aktion, body:body });
-    erledigt('warn', 'queued', hinweis);
-  });
+  if (!raus && !p.lids.length) return;
+  var job = raus ? { action:'unshipPallet', body:{ sscc:p.sscc } }
+                 : { action:'bindShip', body:{ sscc:p.sscc, lids:palNeu(p).map(function (l) { return l.lid; }) } };
+  var ungepickt = raus ? 0 : p.lids.filter(function (l) { return !gepickt(l.lid); }).length;
+  var namen = filialenVon(p.lids);
+  if (!namen.length && p.info && p.info.store) namen = splitMulti(p.info.store);
+  enqueue(job);
+  cacheAnwenden(job);
+  ls(K.cache, cache); reindex();
+  scanFreigeben([p.sscc].concat(p.lids.map(function (l) { return l.lid; })));
+  pal = null; palRender();
+  flash(raus || ungepickt ? 'warn' : 'ok', namen.join(' / ') || p.sscc.slice(-6),
+        t(raus ? 'unshipDone' : 'shipDone') + '  ' + p.sscc.slice(-6) +
+        (raus ? '' : ' (' + p.lids.length + ')') + (ungepickt ? '  ' + t('notPicked') + ' ' + ungepickt : ''));
 }
 
 function palAbbrechen() {
-  if (!pal || pal.sende) return;
+  if (!pal) return;
   scanFreigeben([pal.sscc].concat(pal.lids.map(function (l) { return l.lid; })));
   pal = null; palRender(); flashT('', 'dropped');
 }
@@ -1003,12 +957,12 @@ function doBind(c) {
   if (c.kind === 'sscc') {
     if (pal && ssccEq(pal.sscc, c.value)) { flashT('warn', 'already'); return; }
 
-    if (pal && (pal.sende || palNeu(pal).length)) { flashT('warn', 'shipBusy', pal.sscc.slice(-6)); return; }
+    if (pal && palNeu(pal).length) { flashT('warn', 'shipBusy', pal.sscc.slice(-6)); return; }
     var vorhanden = palVorhanden(c.value);
-    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null, sende:false,
+    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null,
             zustand:palZustandMit(c.value, palZustand(vorhanden)) };
     palRender();
-    if (pal.zustand === 'shipped') flashT('warn', 'unshipAsk', c.value.slice(-6));
+    if (pal.zustand === 'shipped') flashT('warn', 'shipped');
     else if (pal.zustand === 'partial') flashT('warn', 'newPal', '', 'palPartial');
     else if (c.checkOk) flashT('ok', 'newPal', c.value.slice(-6));
     else flashT('warn', 'newPal', '', 'check');
@@ -1018,7 +972,6 @@ function doBind(c) {
   if (!pal) { flashT('bad', 'needCode'); return; }
 
   if (!darf('bindShip')) { flashT('bad', 'forbidden'); return; }
-  if (pal.sende) return;
 
   if (pal.zustand === 'shipped') { flashT('bad', 'palShipped'); return; }
   var l = byLid[c.value];
@@ -1089,7 +1042,7 @@ function pickRender() {
   var l = pk.l, liste = listenName(l.vid);
   $('pickStore').textContent = l.store || '–';
   $('pickStore').className = 'big' + (pk.art === 'info' ? ' versendet' : '');
-  $('pickCont').textContent = liste ? t('container') + ' ' + liste : '';
+  $('pickCont').textContent = liste;
   $('pickNr').textContent = l.lid + '  ' + l.seq + '/' + l.total;
   var text = '', teil = false;
   if (pk.art === 'info') text = t('palShipped');
@@ -1243,7 +1196,7 @@ function empPruefen(c) {
     var hier = empLokal[ssccCore(e.sscc)], unterwegs2 = empAusstehend(e.sscc);
     var meins2 = unterwegs2 ? unterwegs2 === 'an' : !!hier;
     e.art = meins2 ? 'stornieren' : 'annehmen';
-    if (hier) e.store = hier.store || '';
+    if (hier) { e.store = hier.store || ''; e.container = hier.container || ''; }
     empRender();
     flashT('warn', 'offlineNoCheck');
   });
@@ -1262,6 +1215,7 @@ function empRender() {
   if (!emp) return;
   var e = emp, p = e.info || {};
   var name = e.store ? splitMulti(e.store).join(' / ') : '–';
+  $('recvCont').textContent = p.container || e.container || '';
   $('recvStore').textContent = name;
   $('recvStore').style.fontSize = voll ? riesig(name) : '';
   $('recvSscc').textContent = e.sscc ? e.sscc.replace(/(\d{4})(?=\d)/g, '$1 ') : e.code;
@@ -1304,7 +1258,7 @@ function empBuchen() {
   var body = { sscc:e.sscc, scannedAt:e.zeit };
   var wo = e.sscc.slice(-6);
   function erledigt(art, key) {
-    empLokalMerken(e.sscc, an ? { at:e.zeit, store:e.store } : null);
+    empLokalMerken(e.sscc, an ? { at:e.zeit, store:e.store, container:(e.info && e.info.container) || e.container || '' } : null);
     empZuletzt = { sscc:e.sscc, lids:e.lids.slice(), at:Date.now() };
     scanFreigeben([e.sscc].concat(e.lids));
     if (emp === e) { emp = null; empRender(); }
@@ -1554,7 +1508,7 @@ $('cfgPair').onclick = function () {
   if (pairBusy) return;
   var api = $('cfgApi').value.trim();
   var code = $('cfgCode').value.trim().toUpperCase();
-  if (!apiOk(api) || !code) { $('cfgMsg').textContent = '!'; return; }
+  if (!apiOk(api) || !code) { $('cfgMsg').textContent = t('pairFail'); return; }
   cfg.api = api; ls(K.cfg, cfg);
   $('cfgMsg').textContent = '';
   setPairBusy(true);
@@ -1562,17 +1516,13 @@ $('cfgPair').onclick = function () {
   var frist = setTimeout(function () {
     if (!pairBusy) return;
     setPairBusy(false);
-    $('cfgMsg').textContent = t('offline');
+    $('cfgMsg').textContent = t('pairFail');
   }, 30000);
   apiPost('pair', { code:code }).then(function (d) {
     clearTimeout(frist);
     setPairBusy(false);
-    if (!d.ok) {
-      $('cfgMsg').textContent =
-        d.code === 'locked' ? t('locked') :
-        d.code === 'toomany' ? t('toomany') : t('codeBad');
-      return;
-    }
+
+    if (!d.ok) { $('cfgMsg').textContent = t('pairFail'); return; }
     cfg.tok = d.token; cfg.who = d.who; cfg.rw = !!d.rw;
     cfg.rolle = d.role || ''; cfg.rechte = d.rechte || null;
     ls(K.cfg, cfg);
@@ -1580,7 +1530,7 @@ $('cfgPair').onclick = function () {
   }).catch(function () {
     clearTimeout(frist);
     setPairBusy(false);
-    $('cfgMsg').textContent = t('offline');
+    $('cfgMsg').textContent = t('pairFail');
   });
 };
 
