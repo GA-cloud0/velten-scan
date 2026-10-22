@@ -65,6 +65,8 @@
   button.b.w { width:100%; }
   input { width:100%; padding:13px; font-size:17px; border-radius:10px; border:1px solid var(--line);
     background:var(--bg); color:var(--text); margin-top:8px; }
+
+  .notiz[disabled] { background:var(--panel); opacity:1; -webkit-text-fill-color:var(--text); }
   #cfgCode { font-size:30px; text-align:center; letter-spacing:8px; font-weight:800;
     text-transform:uppercase; font-family:ui-monospace,Menlo,monospace; }
 
@@ -208,6 +210,7 @@
         <div class="sscc" id="ssccTxt"></div>
         <div id="palBanner" class="banner"></div>
         <div id="lidList"></div>
+        <input id="palNote" class="notiz" type="text" maxlength="200" autocomplete="off" data-ph="note">
         <div style="height:8px"></div>
         <div class="two">
           <button id="btnDrop" class="b g" data-t="cancel">Abbrechen</button>
@@ -223,6 +226,7 @@
         <div class="sscc" id="recvSscc"></div>
         <div id="recvBanner" class="banner"></div>
         <div id="recvList"></div>
+        <input id="recvNote" class="notiz" type="text" maxlength="200" autocomplete="off" data-ph="note">
         <div style="height:10px"></div>
         <div class="two">
           <button id="btnRecvNo" class="b g" data-t="cancel">Abbrechen</button>
@@ -265,7 +269,7 @@ var TXT = {
         forbidden:'Keine Berechtigung', close:'Schliessen',
         pickConfirm:'Picken buchen', pickUndo:'Picken stornieren', pickUndoAsk:'Schon gepickt - stornieren?',
         pickDone:'Gepickt', pickUndone:'Picken storniert', notPicked:'Nicht gepickt', needQr:'Bitte QR scannen',
-        shipped:'Ausgeliefert', unship:'Ausgang stornieren',
+        shipped:'Ausgeliefert', unship:'Ausgang stornieren', note:'Notiz',
         unshipDone:'Ausgang storniert', received:'Schon angenommen:' },
   zh: { title:'go asia 货物物流', pick:'抓货', bind:'出货', stand:'进度',
         cam:'扫描', camOff:'停止', photo:'拍照取码',
@@ -290,7 +294,7 @@ var TXT = {
         forbidden:'无权限', close:'关闭',
         pickConfirm:'确认抓货', pickUndo:'撤回抓货', pickUndoAsk:'已抓货，是否撤回？',
         pickDone:'抓货完成', pickUndone:'已撤回抓货', notPicked:'未抓货', needQr:'请扫 QR',
-        shipped:'已出货', unship:'撤回出货',
+        shipped:'已出货', unship:'撤回出货', note:'备注',
         unshipDone:'已撤回出货', received:'门店已接货：' }
 };
 var lang = 'de';
@@ -424,6 +428,9 @@ function applyLang() {
   Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (el) {
     el.textContent = t(el.dataset.t);
   });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-ph]'), function (el) {
+    el.placeholder = t(el.dataset.ph);
+  });
   $('lang').textContent = lang === 'zh' ? '中' : 'DE';
   $('btnCam').textContent = stream ? t('camOff') : t('cam');
   $('meRole').textContent = cfg.rolle || (cfg.rw ? '' : t('readonly'));
@@ -445,6 +452,12 @@ function ssccCore(raw) {
 }
 function ssccShow(core) { return core ? '00' + core : ''; }
 function normSscc(raw) { return ssccShow(ssccCore(raw)); }
+
+function notizZeigen(el, sichtbar, gesperrt, wert) {
+  show(el, sichtbar);
+  el.disabled = !!gesperrt;
+  if (el.value !== wert) el.value = wert;
+}
 function ssccEq(a, b) { var x = ssccCore(a); return x !== '' && x === ssccCore(b); }
 
 function splitMulti(s) {
@@ -479,7 +492,7 @@ function mitFrist(p, ms) {
 var MELDUNG_FUER = { already_shipped:'palShipped', empty:'emptyPal', readonly:'readonly',
                      forbidden:'forbidden', unknown:'notFound', received_elsewhere:'recvElse',
                      not_mine:'recvElse', bound_elsewhere:'boundElse', void:'voided',
-                     received:'received' };
+                     received:'received', not_shipped:'recvNotShipped' };
 
 function darf(aktion) {
   if (cfg.rechte) return cfg.rechte.indexOf(aktion) >= 0;
@@ -686,6 +699,8 @@ function flushSchritt() {
       abgelehnt = true;
       if (MELDUNG_FUER[d.code]) flashT('bad', MELDUNG_FUER[d.code], wo);
       else flash('bad', d.error || d.code || '', wo);
+
+      if (job.action === 'receivePallet') empLokalMerken(job.body.sscc, null);
     }
 
     var nein = d.ok && d.results ? d.results.filter(function (r) { return !r.ok; }) : [];
@@ -883,6 +898,9 @@ function palRender() {
       palRender();
     };
   });
+
+  var gespeichert = raus ? String(info.shippedNote || '') : '';
+  notizZeigen($('palNote'), raus ? !!gespeichert : darf('bindShip'), raus, raus ? gespeichert : pal.notiz);
   var ok = $('btnCommit');
   if (raus) {
     show(ok, !angenommen && darf('unshipPallet'));
@@ -904,7 +922,8 @@ function palBuchen() {
   var raus = p.zustand === 'shipped';
   if (!raus && !p.lids.length) return;
   var job = raus ? { action:'unshipPallet', body:{ sscc:p.sscc } }
-                 : { action:'bindShip', body:{ sscc:p.sscc, lids:palNeu(p).map(function (l) { return l.lid; }) } };
+                 : { action:'bindShip', body:{ sscc:p.sscc, lids:palNeu(p).map(function (l) { return l.lid; }),
+                                               note:String(p.notiz || '').trim() } };
   var ungepickt = raus ? 0 : p.lids.filter(function (l) { return !gepickt(l.lid); }).length;
   var namen = filialenVon(p.lids);
   if (!namen.length && p.info && p.info.store) namen = splitMulti(p.info.store);
@@ -960,7 +979,7 @@ function doBind(c) {
 
     if (pal && palNeu(pal).length) { flashT('warn', 'shipBusy', pal.sscc.slice(-6)); return; }
     var vorhanden = palVorhanden(c.value);
-    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null,
+    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null, notiz:'',
             zustand:palZustandMit(c.value, palZustand(vorhanden)) };
     palRender();
     if (pal.zustand === 'shipped') flashT('warn', 'shipped');
@@ -1154,7 +1173,7 @@ function empStand(e) {
 
 function empPruefen(c) {
   var e = emp = { art:'pruefen', code:c.value, sscc:c.kind === 'sscc' ? c.value : '', lids:[],
-                  store:'', gesehen:{}, info:null, pruefen:true, sende:false, offline:false,
+                  store:'', gesehen:{}, info:null, pruefen:true, sende:false, offline:false, notiz:'',
                   zeit:new Date().toISOString() };
   if (c.kind === 'lid') e.gesehen[c.value] = true;
   empRender();
@@ -1171,8 +1190,12 @@ function empPruefen(c) {
       if (d.code !== 'auth') flash('bad', d.error || d.code || '', c.value.slice(-6));
       return;
     }
+
+    var nichtRaus = d.found ? d.ohnePalette || (d.pallet && !d.pallet.shipped && !d.pallet.receivedAt)
+                            : d.kind === 'pallet';
+    if (nichtRaus) { emp = null; empRender(); flashT('bad', 'recvNotShipped', c.value.slice(-6)); return; }
     if (!d.found) { emp = null; empRender(); flashT('bad', 'notFound', c.value.slice(-6)); return; }
-    if (d.ohnePalette || d.mehrdeutig || !d.pallet) {
+    if (d.mehrdeutig || !d.pallet) {
       emp = null; empRender(); flashT('bad', 'recvUseBarcode', c.value.slice(-6)); return;
     }
     var p = d.pallet;
@@ -1242,6 +1265,10 @@ function empRender() {
       '</div>';
   }).join('');
 
+  var gespeichert = e.art === 'stornieren' ? String(p.receivedNote || '') : '';
+  notizZeigen($('recvNote'), e.art === 'annehmen' || !!gespeichert, e.art !== 'annehmen' || e.sende,
+              e.art === 'annehmen' ? e.notiz : gespeichert);
+
   var knopf = e.art === 'annehmen' ? 'recvConfirm' : e.art === 'stornieren' ? 'recvUndo' : '';
   var ok = $('btnRecvOk');
   show(ok, !!knopf || e.pruefen);
@@ -1257,6 +1284,7 @@ function empBuchen() {
   var an = e.art === 'annehmen';
   var aktion = an ? 'receivePallet' : 'unreceivePallet';
   var body = { sscc:e.sscc, scannedAt:e.zeit };
+  if (an) body.note = String(e.notiz || '').trim();
   var wo = e.sscc.slice(-6);
   function erledigt(art, key) {
     empLokalMerken(e.sscc, an ? { at:e.zeit, store:e.store, container:(e.info && e.info.container) || e.container || '' } : null);
@@ -1279,6 +1307,8 @@ function empBuchen() {
     if (d && (d.code === 'received_elsewhere' || d.code === 'not_mine') && d.pallet && emp === e) {
       e.info = d.pallet; e.art = 'info';
     }
+
+    if (d && d.code === 'not_shipped' && emp === e) { emp = null; empRender(); }
     if (emp === e) empRender();
     if (d && MELDUNG_FUER[d.code]) flashT('bad', MELDUNG_FUER[d.code], wo);
     else if (!d || d.code !== 'auth') flash('bad', (d && (d.error || d.code)) || '', wo);
@@ -1485,6 +1515,8 @@ $('btnPickOk').onclick = function () { pickBuchen(); };
 $('btnPickNo').onclick = function () { pickAbbrechen(); };
 $('btnRecvOk').onclick = function () { empBuchen(); };
 $('btnRecvNo').onclick = function () { empAbbrechen(); };
+$('palNote').oninput = function () { if (pal && pal.zustand !== 'shipped') pal.notiz = $('palNote').value; };
+$('recvNote').oninput = function () { if (emp && emp.art === 'annehmen' && !emp.sende) emp.notiz = $('recvNote').value; };
 
 $('btnSync').onclick = function () {
   sync().then(function (ok) { if (ok) flashT('ok', 'reload'); else flashT('bad', 'offline'); });
