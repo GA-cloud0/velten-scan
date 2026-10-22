@@ -270,6 +270,7 @@ var TXT = {
         pickConfirm:'Picken buchen', pickUndo:'Picken stornieren', pickUndoAsk:'Schon gepickt - stornieren?',
         pickDone:'Gepickt', pickUndone:'Picken storniert', notPicked:'Nicht gepickt', needQr:'Bitte QR scannen',
         shipped:'Ausgeliefert', unship:'Ausgang stornieren', note:'Notiz',
+        transfer:'Umlagerung', noPickUm:'Umlagerung ohne Picken',
         unshipDone:'Ausgang storniert', received:'Schon angenommen:' },
   zh: { title:'go asia 货物物流', pick:'抓货', bind:'出货', stand:'进度',
         cam:'扫描', camOff:'停止', photo:'拍照取码',
@@ -295,6 +296,7 @@ var TXT = {
         pickConfirm:'确认抓货', pickUndo:'撤回抓货', pickUndoAsk:'已抓货，是否撤回？',
         pickDone:'抓货完成', pickUndone:'已撤回抓货', notPicked:'未抓货', needQr:'请扫 QR',
         shipped:'已出货', unship:'撤回出货', note:'备注',
+        transfer:'调货单', noPickUm:'调货单无需抓货',
         unshipDone:'已撤回出货', received:'门店已接货：' }
 };
 var lang = 'de';
@@ -446,6 +448,9 @@ function applyLang() {
 
 var LID_RE = /^T-\d{4}[A-Z]{1,2}-\d{3}$/;
 
+var UID_RE = /^U-\d{4}-\d{3}$/;
+function istUm(lid) { return UID_RE.test(String(lid || '')); }
+
 function ssccCore(raw) {
   var d = String(raw == null ? '' : raw).replace(/[^0-9]/g, '');
   return d.length >= 18 ? d.slice(-18) : '';
@@ -475,7 +480,7 @@ function gs1Ok(raw) {
 }
 function classify(x) {
   var s = String(x || '').trim().toUpperCase();
-  if (LID_RE.test(s)) return { kind:'lid', value:s };
+  if (LID_RE.test(s) || UID_RE.test(s)) return { kind:'lid', value:s };
   var c = ssccCore(s);
   if (c) return { kind:'sscc', value:ssccShow(c), checkOk:gs1Ok(c) };
   return { kind:null, value:s };
@@ -693,7 +698,7 @@ function flushSchritt() {
 
     queue.shift(); ls(K.queue, queue); setNet(true);
     var wo = job.body && job.body.sscc ? String(job.body.sscc).slice(-6) :
-             job.body && job.body.lid ? String(job.body.lid) : '';
+             job.body && (job.body.lid || job.body.uid) ? String(job.body.lid || job.body.uid) : '';
 
     if (!d.ok) {
       abgelehnt = true;
@@ -726,8 +731,8 @@ function flushSchritt() {
         lids:d.results.filter(function (r) { return r.ok; }).map(function (r) { return r.lid; }) } } : job);
 
       if (job.action === 'shipPallet') flashT('ok', 'shipDone', wo);
-      if (job.action === 'receivePallet') flashT('ok', 'recvDone', wo);
-      if (job.action === 'unreceivePallet') flashT('ok', 'recvUndone', wo);
+      if (job.action === 'receivePallet' || job.action === 'receiveUmlagerung') flashT('ok', 'recvDone', wo);
+      if (job.action === 'unreceivePallet' || job.action === 'unreceiveUmlagerung') flashT('ok', 'recvUndone', wo);
     }
     queueShow();
     return flushSchritt();
@@ -793,7 +798,7 @@ function palVorhanden(sscc) {
   return (cache.labels || []).filter(function (l) {
     return splitMulti(l.sscc).some(function (x) { return ssccEq(x, sscc); });
   }).map(function (l) {
-    return { lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid,
+    return { lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid, name:l.name,
              alt:true, shipped:rausHier(l), gesperrt:String(l.status) === '已出货' };
   });
 }
@@ -819,9 +824,15 @@ function palZustandMit(sscc, sonst) {
 
 function zeileAus(lid) {
   var l = byLid[lid];
-  return l ? { lid:lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid,
+  return l ? { lid:lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid, name:l.name,
                alt:true, shipped:rausHier(l), gesperrt:String(l.status) === '已出货' }
            : { lid:lid, store:'', seq:'', total:'', vid:'', alt:true, shipped:false, gesperrt:false };
+}
+
+function scheinText(l) {
+  if (istUm(l.lid)) return l.store + ' ' + t('transfer') + (l.name ? ' ' + l.name : '');
+  var liste = listenName(l.vid);
+  return l.store + ' ' + l.seq + '/' + l.total + (liste ? ' ' + liste : '');
 }
 
 function filialenVon(lids) {
@@ -882,11 +893,9 @@ function palRender() {
   $('lidList').innerHTML = pal.lids.map(function (l, i) {
 
     var fest = raus || l.alt;
-    var liste = listenName(l.vid);
     return '<div class="row' + (l.alt ? ' alt' : '') + (l.gesperrt ? ' raus' : '') + '">' +
       '<span class="g"><span class="m">' + esc(l.lid) + '</span>' +
-      (l.store ? '<div class="s">' + esc(l.store) + ' ' + esc(l.seq) + '/' + esc(l.total) +
-                 (liste ? ' ' + esc(liste) : '') + '</div>' : '') +
+      (l.store ? '<div class="s">' + esc(scheinText(l)) + '</div>' : '') +
       '</span>' + (fest ? '' : '<span class="x" data-rm="' + i + '">&times;</span>') + '</div>';
   }).join('');
   Array.prototype.forEach.call($('lidList').querySelectorAll('[data-rm]'), function (x) {
@@ -924,7 +933,7 @@ function palBuchen() {
   var job = raus ? { action:'unshipPallet', body:{ sscc:p.sscc } }
                  : { action:'bindShip', body:{ sscc:p.sscc, lids:palNeu(p).map(function (l) { return l.lid; }),
                                                note:String(p.notiz || '').trim() } };
-  var ungepickt = raus ? 0 : p.lids.filter(function (l) { return !gepickt(l.lid); }).length;
+  var ungepickt = raus ? 0 : p.lids.filter(function (l) { return !istUm(l.lid) && !gepickt(l.lid); }).length;
   var namen = filialenVon(p.lids);
   if (!namen.length && p.info && p.info.store) namen = splitMulti(p.info.store);
   enqueue(job);
@@ -1001,10 +1010,12 @@ function doBind(c) {
   var andere = ssccOhne(l.sscc, pal.sscc);
   if (andere.length) { flashT('bad', 'boundElse', String(andere[0]).slice(-6)); return; }
   var fremd = pal.lids.filter(function (x) { return x.store !== l.store; });
-  pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid });
+  pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid, name:l.name });
   palRender();
   var liste = listenName(l.vid);
   if (fremd.length) flashT('warn', 'otherStore', fremd[0].store + ' / ' + l.store);
+
+  else if (istUm(l.lid)) flash('ok', l.store, t('transfer') + (l.name ? '  ' + l.name : ''));
 
   else if (!gepickt(l.lid)) flash('warn', l.store, l.seq + '/' + l.total + '  ' + t('notPicked'));
   else flash('ok', l.store, l.seq + '/' + l.total + (liste ? '  ' + liste : ''));
@@ -1029,6 +1040,7 @@ function gepickt(lid) {
 
 function doPick(c) {
   if (c.kind !== 'lid') { flashT('bad', 'needQr'); return; }
+  if (istUm(c.value)) { flashT('bad', 'noPickUm', c.value); return; }
 
   if (pkZuletzt && pkZuletzt.lid === c.value && Date.now() - pkZuletzt.at < EMP_SCHONFRIST) return;
   if (pk) {
@@ -1132,6 +1144,16 @@ function empAusstehend(sscc) {
   return letzte;
 }
 
+function umAusstehend(uid) {
+  var letzte = '';
+  queue.forEach(function (j) {
+    if (!j.body || j.body.uid !== uid) return;
+    if (j.action === 'receiveUmlagerung') letzte = 'an';
+    if (j.action === 'unreceiveUmlagerung') letzte = 'ab';
+  });
+  return letzte;
+}
+
 function kurzZeit(wert) {
   var d = wert ? new Date(wert) : null;
   if (!d || isNaN(d.getTime())) return '';
@@ -1195,6 +1217,7 @@ function empPruefen(c) {
                             : d.kind === 'pallet';
     if (nichtRaus) { emp = null; empRender(); flashT('bad', 'recvNotShipped', c.value.slice(-6)); return; }
     if (!d.found) { emp = null; empRender(); flashT('bad', 'notFound', c.value.slice(-6)); return; }
+    if (d.umlagerung) { empUmlagerung(e, d.umlagerung); return; }
     if (d.mehrdeutig || !d.pallet) {
       emp = null; empRender(); flashT('bad', 'recvUseBarcode', c.value.slice(-6)); return;
     }
@@ -1226,6 +1249,19 @@ function empPruefen(c) {
   });
 }
 
+function empUmlagerung(e, u) {
+  e.info = u; e.uid = u.uid; e.name = u.name || u.uid; e.lids = [u.uid];
+  var unterwegs = umAusstehend(u.uid);
+  var meins = unterwegs ? unterwegs === 'an' : (!!u.receivedAt && u.mine);
+  if (meins) e.art = 'stornieren';
+  else if (u.receivedAt && !u.mine && unterwegs !== 'ab') e.art = 'info';
+  else e.art = 'annehmen';
+  empRender();
+  if (e.art === 'info') flashT('bad', 'recvElse', u.receivedBy);
+  else if (e.art === 'stornieren') flashT('warn', 'recvUndoAsk');
+  else flash('ok', e.name, t('transfer'));
+}
+
 function riesig(text) {
   var woerter = String(text || '').split(/\s+/);
   var n = Math.max(3, Math.max.apply(null, woerter.map(function (w) { return w.length; })));
@@ -1238,8 +1274,8 @@ function empRender() {
   show($('recvBox'), !!emp);
   if (!emp) return;
   var e = emp, p = e.info || {};
-  var name = e.store ? splitMulti(e.store).join(' / ') : '–';
-  $('recvCont').textContent = p.container || e.container || '';
+  var name = e.uid ? e.name : e.store ? splitMulti(e.store).join(' / ') : '–';
+  $('recvCont').textContent = e.uid ? t('transfer') : p.container || e.container || '';
   $('recvStore').textContent = name;
   $('recvStore').style.fontSize = voll ? riesig(name) : '';
   $('recvSscc').textContent = e.sscc ? e.sscc.replace(/(\d{4})(?=\d)/g, '$1 ') : e.code;
@@ -1252,7 +1288,7 @@ function empRender() {
     teil = true;
   } else if (e.offline) {
     text = t('offlineNoCheck'); teil = true;
-  } else if (e.info && !p.shipped) {
+  } else if (e.info && !e.uid && !p.shipped) {
     text = t('recvNotShipped'); teil = true;
   }
   $('recvBanner').className = 'banner' + (teil ? ' teil' : '');
@@ -1282,19 +1318,20 @@ function empBuchen() {
   var e = emp;
   if (!e || e.pruefen || e.sende || (e.art !== 'annehmen' && e.art !== 'stornieren')) return Promise.resolve();
   var an = e.art === 'annehmen';
-  var aktion = an ? 'receivePallet' : 'unreceivePallet';
-  var body = { sscc:e.sscc, scannedAt:e.zeit };
+  var aktion = e.uid ? (an ? 'receiveUmlagerung' : 'unreceiveUmlagerung') : (an ? 'receivePallet' : 'unreceivePallet');
+  var body = e.uid ? { uid:e.uid, scannedAt:e.zeit } : { sscc:e.sscc, scannedAt:e.zeit };
   if (an) body.note = String(e.notiz || '').trim();
-  var wo = e.sscc.slice(-6);
+  var wo = (e.uid || e.sscc).slice(-6);
   function erledigt(art, key) {
-    empLokalMerken(e.sscc, an ? { at:e.zeit, store:e.store, container:(e.info && e.info.container) || e.container || '' } : null);
+
+    if (!e.uid) empLokalMerken(e.sscc, an ? { at:e.zeit, store:e.store, container:(e.info && e.info.container) || e.container || '' } : null);
     empZuletzt = { sscc:e.sscc, lids:e.lids.slice(), at:Date.now() };
-    scanFreigeben([e.sscc].concat(e.lids));
+    scanFreigeben([e.uid || e.sscc].concat(e.lids));
     if (emp === e) { emp = null; empRender(); }
-    flash(art, splitMulti(e.store).join(' / ') || wo, t(key));
+    flash(art, e.uid ? e.name : splitMulti(e.store).join(' / ') || wo, t(key));
   }
 
-  if (e.offline || ausstehend(e.sscc).length) {
+  if (e.offline || (e.uid ? umAusstehend(e.uid) : ausstehend(e.sscc).length)) {
     enqueue({ action:aktion, body:body });
     erledigt('warn', 'queued');
     return Promise.resolve();
@@ -1304,8 +1341,8 @@ function empBuchen() {
     if (d && d.ok) { erledigt('ok', an ? 'recvDone' : 'recvUndone'); return; }
     e.sende = false;
 
-    if (d && (d.code === 'received_elsewhere' || d.code === 'not_mine') && d.pallet && emp === e) {
-      e.info = d.pallet; e.art = 'info';
+    if (d && (d.code === 'received_elsewhere' || d.code === 'not_mine') && (d.pallet || d.umlagerung) && emp === e) {
+      e.info = d.pallet || d.umlagerung; e.art = 'info';
     }
 
     if (d && d.code === 'not_shipped' && emp === e) { emp = null; empRender(); }
