@@ -93,6 +93,8 @@
   .spin { display:inline-block; width:19px; height:19px; border-radius:50%;
     border:3px solid rgba(255,255,255,.35); border-top-color:#fff;
     animation:spin .8s linear infinite; vertical-align:-4px; }
+
+  button.b.g .spin { border-color:rgba(128,128,128,.35); border-top-color:currentColor; }
   button.b[disabled] { opacity:.6; }
 
   button.b.rot { background:var(--rot); }
@@ -423,6 +425,7 @@ function flashT(kind, key, b, bKey) {
 
 var SPINNER = '<span class="spin"></span>';
 var pairBusy = false;
+var laedt = false;
 
 function applyLang() {
   document.documentElement.lang = lang === 'zh' ? 'zh' : 'de';
@@ -438,6 +441,7 @@ function applyLang() {
   $('meRole').textContent = cfg.rolle || (cfg.rw ? '' : t('readonly'));
 
   if (pairBusy) $('cfgPair').innerHTML = SPINNER;
+  if (laedt) $('btnSync').innerHTML = SPINNER;
 
   palRender();
   pickRender();
@@ -1564,7 +1568,17 @@ $('palNote').oninput = function () { if (pal && pal.zustand !== 'shipped') pal.n
 $('recvNote').oninput = function () { if (emp && emp.art === 'annehmen' && !emp.sende) emp.notiz = $('recvNote').value; };
 
 $('btnSync').onclick = function () {
-  sync().then(function (ok) { if (ok) flashT('ok', 'reload'); else flashT('bad', 'offline'); });
+  if (laedt) return;
+  var b = $('btnSync');
+  laedt = true;
+  b.disabled = true;
+  b.innerHTML = SPINNER;
+  sync().then(function (ok) {
+    laedt = false;
+    b.disabled = false;
+    b.textContent = t('reload');
+    if (ok) flashT('ok', 'reload'); else flashT('bad', 'offline');
+  });
 };
 $('lang').onclick = function () { lang = lang === 'zh' ? 'de' : 'zh'; ls(K.lang, lang); applyLang(); };
 
