@@ -270,7 +270,7 @@ var TXT = {
         pickConfirm:'Picken buchen', pickUndo:'Picken stornieren', pickUndoAsk:'Schon gepickt - stornieren?',
         pickDone:'Gepickt', pickUndone:'Picken storniert', notPicked:'Nicht gepickt', needQr:'Bitte QR scannen',
         shipped:'Ausgeliefert', unship:'Ausgang stornieren', note:'Notiz',
-        transfer:'Umlagerung', noPickUm:'Umlagerung ohne Picken',
+        transfer:'Umlagerung', noPickUm:'Umlagerung ohne Picken', kartons:'Kartons',
         unshipDone:'Ausgang storniert', received:'Schon angenommen:' },
   zh: { title:'go asia 货物物流', pick:'抓货', bind:'出货', stand:'进度',
         cam:'扫描', camOff:'停止', photo:'拍照取码',
@@ -296,7 +296,7 @@ var TXT = {
         pickConfirm:'确认抓货', pickUndo:'撤回抓货', pickUndoAsk:'已抓货，是否撤回？',
         pickDone:'抓货完成', pickUndone:'已撤回抓货', notPicked:'未抓货', needQr:'请扫 QR',
         shipped:'已出货', unship:'撤回出货', note:'备注',
-        transfer:'调货单', noPickUm:'调货单无需抓货',
+        transfer:'调货单', noPickUm:'调货单无需抓货', kartons:'箱',
         unshipDone:'已撤回出货', received:'门店已接货：' }
 };
 var lang = 'de';
@@ -450,6 +450,9 @@ var LID_RE = /^T-\d{4}[A-Z]{1,2}-\d{3}$/;
 
 var UID_RE = /^U-\d{4}-\d{3}$/;
 function istUm(lid) { return UID_RE.test(String(lid || '')); }
+
+var FRISCH = '🥬';
+function kartonText(k) { return k ? ' · ' + k + ' ' + t('kartons') : ''; }
 
 function ssccCore(raw) {
   var d = String(raw == null ? '' : raw).replace(/[^0-9]/g, '');
@@ -789,7 +792,7 @@ Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (
 
 function listenName(vid) {
   var v = (cache.verteilungen || []).filter(function (x) { return x.vid === vid; })[0];
-  return v ? String(v.name || '') : '';
+  return !v ? '' : (v.frisch ? FRISCH + ' ' : '') + String(v.name || '');
 }
 
 var pal = null;
@@ -798,7 +801,7 @@ function palVorhanden(sscc) {
   return (cache.labels || []).filter(function (l) {
     return splitMulti(l.sscc).some(function (x) { return ssccEq(x, sscc); });
   }).map(function (l) {
-    return { lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid, name:l.name,
+    return { lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid, name:l.name, kartons:l.kartons,
              alt:true, shipped:rausHier(l), gesperrt:String(l.status) === '已出货' };
   });
 }
@@ -824,7 +827,7 @@ function palZustandMit(sscc, sonst) {
 
 function zeileAus(lid) {
   var l = byLid[lid];
-  return l ? { lid:lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid, name:l.name,
+  return l ? { lid:lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid, name:l.name, kartons:l.kartons,
                alt:true, shipped:rausHier(l), gesperrt:String(l.status) === '已出货' }
            : { lid:lid, store:'', seq:'', total:'', vid:'', alt:true, shipped:false, gesperrt:false };
 }
@@ -832,7 +835,7 @@ function zeileAus(lid) {
 function scheinText(l) {
   if (istUm(l.lid)) return l.store + ' ' + t('transfer') + (l.name ? ' ' + l.name : '');
   var liste = listenName(l.vid);
-  return l.store + ' ' + l.seq + '/' + l.total + (liste ? ' ' + liste : '');
+  return l.store + ' ' + l.seq + '/' + l.total + kartonText(l.kartons) + (liste ? ' ' + liste : '');
 }
 
 function filialenVon(lids) {
@@ -1010,15 +1013,15 @@ function doBind(c) {
   var andere = ssccOhne(l.sscc, pal.sscc);
   if (andere.length) { flashT('bad', 'boundElse', String(andere[0]).slice(-6)); return; }
   var fremd = pal.lids.filter(function (x) { return x.store !== l.store; });
-  pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid, name:l.name });
+  pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid, name:l.name, kartons:l.kartons });
   palRender();
   var liste = listenName(l.vid);
   if (fremd.length) flashT('warn', 'otherStore', fremd[0].store + ' / ' + l.store);
 
   else if (istUm(l.lid)) flash('ok', l.store, t('transfer') + (l.name ? '  ' + l.name : ''));
 
-  else if (!gepickt(l.lid)) flash('warn', l.store, l.seq + '/' + l.total + '  ' + t('notPicked'));
-  else flash('ok', l.store, l.seq + '/' + l.total + (liste ? '  ' + liste : ''));
+  else if (!gepickt(l.lid)) flash('warn', l.store, l.seq + '/' + l.total + kartonText(l.kartons) + '  ' + t('notPicked'));
+  else flash('ok', l.store, l.seq + '/' + l.total + kartonText(l.kartons) + (liste ? '  ' + liste : ''));
 }
 
 var pk = null, pkZuletzt = null;
@@ -1065,7 +1068,7 @@ function pickZeigen(l) {
   pickRender();
   if (art === 'info') flashT('bad', 'palShipped', l.lid.slice(-6));
   else if (art === 'stornieren') flashT('warn', 'pickUndoAsk');
-  else flash('', l.store, l.seq + '/' + l.total);
+  else flash('', l.store, l.seq + '/' + l.total + kartonText(l.kartons));
 }
 
 function pickRender() {
@@ -1075,7 +1078,7 @@ function pickRender() {
   $('pickStore').textContent = l.store || '–';
   $('pickStore').className = 'big' + (pk.art === 'info' ? ' versendet' : '');
   $('pickCont').textContent = liste;
-  $('pickNr').textContent = l.lid + '  ' + l.seq + '/' + l.total;
+  $('pickNr').textContent = l.lid + '  ' + l.seq + '/' + l.total + kartonText(l.kartons);
   var text = '', teil = false;
   if (pk.art === 'info') text = t('palShipped');
   else if (pk.art === 'stornieren') {
@@ -1103,7 +1106,8 @@ function pickBuchen() {
   pkZuletzt = { lid:p.lid, at:Date.now() };
   scanFreigeben([p.lid]);
   pk = null; pickRender();
-  flash(an ? 'ok' : 'warn', p.l.store, t(an ? 'pickDone' : 'pickUndone') + '  ' + p.l.seq + '/' + p.l.total);
+  flash(an ? 'ok' : 'warn', p.l.store, t(an ? 'pickDone' : 'pickUndone') + '  ' + p.l.seq + '/' + p.l.total +
+        kartonText(p.l.kartons));
 }
 
 function pickAbbrechen() {
@@ -1294,9 +1298,13 @@ function empRender() {
   $('recvBanner').className = 'banner' + (teil ? ' teil' : '');
   $('recvBanner').textContent = text;
 
+  var schein = {};
+  (p.scheine || []).forEach(function (s) { schein[s.lid] = s; });
   $('recvList').innerHTML = e.lids.map(function (lid) {
-    var ja = e.art === 'sammeln' ? !!e.gesehen[lid] : null;
-    return '<div class="row"><span class="g"><span class="m">' + esc(lid) + '</span></span>' +
+    var ja = e.art === 'sammeln' ? !!e.gesehen[lid] : null, s = schein[lid];
+    return '<div class="row"><span class="g"><span class="m">' + esc(lid) + '</span>' +
+      (s && s.kartons ? '<div class="s">' + (s.frisch ? FRISCH + ' ' : '') + esc(s.kartons + ' ' + t('kartons')) + '</div>' : '') +
+      '</span>' +
       (ja === null ? '' : '<span class="' + (ja ? 'ok' : 'offen') + '">' + (ja ? '&#10003;' : '&#9675;') + '</span>') +
       '</div>';
   }).join('');
@@ -1415,7 +1423,7 @@ function renderVerteilungen() {
       '<div class="vk-kopf"><span class="pf">' + (auf ? '&#9662;' : '&#9656;') + '</span>' +
       '<span class="m">' + esc(v.vid) + '</span>' +
       '<span class="zahlen">' + zahlHtml('pick', z.gepickt, n) + zahlHtml('bind', z.raus, n) + '</span></div>' +
-      '<div class="s">' + esc(v.name) + '</div>' +
+      '<div class="s">' + (v.frisch ? FRISCH + ' ' : '') + esc(v.name) + '</div>' +
       '<div class="balken"><i class="raus" style="width:' + prozent(z.raus, n) + '%"></i>' +
       '<i class="geb" style="width:' + prozent(z.gepickt - z.raus, n) + '%"></i></div>' +
       (auf ? filialenHtml(liste) : '') + '</div>';
