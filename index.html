@@ -66,7 +66,10 @@
   input { width:100%; padding:13px; font-size:17px; border-radius:10px; border:1px solid var(--line);
     background:var(--bg); color:var(--text); margin-top:8px; }
 
-  .notiz[disabled] { background:var(--panel); opacity:1; -webkit-text-fill-color:var(--text); }
+  .camTools { position:absolute; right:8px; bottom:8px; display:flex; gap:6px; }
+  .camTools button { border:0; border-radius:8px; padding:6px 11px; font-size:15px; font-weight:800;
+    background:rgba(255,255,255,.85); color:var(--text); }
+  .camTools button.an { background:var(--hell); color:var(--gruen); }
   #cfgCode { font-size:30px; text-align:center; letter-spacing:8px; font-weight:800;
     text-transform:uppercase; font-family:ui-monospace,Menlo,monospace; }
 
@@ -176,7 +179,9 @@
 
   <main>
     <div id="scanBox">
-      <div class="cam hide" id="cam"><video id="video" playsinline muted autoplay></video><div class="fr"></div></div>
+      <div class="cam hide" id="cam"><video id="video" playsinline muted autoplay></video><div class="fr"></div>
+        <div class="camTools"><button id="btnZoom" class="hide">2&times;</button><button id="btnTorch" class="hide">&#128294;</button></div>
+      </div>
       <div class="two">
         <button id="btnCam" class="b" data-t="cam">Kamera</button>
         <button id="btnShot" class="b g" data-t="photo">Foto</button>
@@ -206,7 +211,6 @@
         <div class="sscc" id="ssccTxt"></div>
         <div id="palBanner" class="banner"></div>
         <div id="lidList"></div>
-        <input id="palNote" class="notiz" type="text" maxlength="200" autocomplete="off" data-ph="note">
         <div style="height:8px"></div>
         <div class="two">
           <button id="btnDrop" class="b g" data-t="cancel">Abbrechen</button>
@@ -222,7 +226,6 @@
         <div class="sscc" id="recvSscc"></div>
         <div id="recvBanner" class="banner"></div>
         <div id="recvList"></div>
-        <input id="recvNote" class="notiz" type="text" maxlength="200" autocomplete="off" data-ph="note">
         <div style="height:10px"></div>
         <div class="two">
           <button id="btnRecvNo" class="b g" data-t="cancel">Abbrechen</button>
@@ -264,7 +267,8 @@ var TXT = {
         forbidden:'Keine Berechtigung', close:'Schliessen',
         pickConfirm:'Picken buchen', pickUndo:'Picken stornieren', pickUndoAsk:'Schon gepickt - stornieren?',
         pickDone:'Gepickt', pickUndone:'Picken storniert', notPicked:'Nicht gepickt', needQr:'Bitte QR scannen',
-        shipped:'Ausgeliefert', unship:'Ausgang stornieren', note:'Notiz',
+        shipped:'Ausgeliefert', unship:'Ausgang stornieren',
+        pickedElse:'Von anderem Geraet gepickt', tipGlare:'Schraeg halten - Spiegelung vermeiden',
         transfer:'Umlagerung', noPickUm:'Umlagerung ohne Picken', kartons:'Kartons',
         unshipDone:'Ausgang storniert', received:'Schon angenommen:' },
   zh: { title:'go asia 货物物流', pick:'抓货', bind:'出货', stand:'进度',
@@ -289,7 +293,8 @@ var TXT = {
         forbidden:'无权限', close:'关闭',
         pickConfirm:'确认抓货', pickUndo:'撤回抓货', pickUndoAsk:'已抓货，是否撤回？',
         pickDone:'抓货完成', pickUndone:'已撤回抓货', notPicked:'未抓货', needQr:'请扫 QR',
-        shipped:'已出货', unship:'撤回出货', note:'备注',
+        shipped:'已出货', unship:'撤回出货',
+        pickedElse:'已被其他设备抓货', tipGlare:'斜一点拿手机，避开反光',
         transfer:'调货单', noPickUm:'调货单无需抓货', kartons:'箱',
         unshipDone:'已撤回出货', received:'门店已接货：' }
 };
@@ -418,6 +423,7 @@ function flashT(kind, key, b, bKey) {
 var SPINNER = '<span class="spin"></span>';
 var pairBusy = false;
 var laedt = false;
+var imSetup = false;
 
 function applyLang() {
   document.documentElement.lang = lang === 'zh' ? 'zh' : 'de';
@@ -457,11 +463,6 @@ function ssccCore(raw) {
 function ssccShow(core) { return core ? '00' + core : ''; }
 function normSscc(raw) { return ssccShow(ssccCore(raw)); }
 
-function notizZeigen(el, sichtbar, gesperrt, wert) {
-  show(el, sichtbar);
-  el.disabled = !!gesperrt;
-  if (el.value !== wert) el.value = wert;
-}
 function ssccEq(a, b) { var x = ssccCore(a); return x !== '' && x === ssccCore(b); }
 
 function splitMulti(s) {
@@ -477,8 +478,16 @@ function gs1Ok(raw) {
   for (var i = 0; i < 17; i++) sum += Number(s.charAt(16 - i)) * (i % 2 === 0 ? 3 : 1);
   return ((10 - sum % 10) % 10) === Number(s.charAt(17));
 }
+
+var LID_KURZ = /^T?-?(\d{4}[A-Z]{1,2})-?(\d{1,3})$/, UID_KURZ = /^U-?(\d{4})-?(\d{1,3})$/;
+function lidNorm(s) {
+  var m = LID_KURZ.exec(s);
+  if (m) return 'T-' + m[1] + '-' + ('00' + m[2]).slice(-3);
+  m = UID_KURZ.exec(s);
+  return m ? 'U-' + m[1] + '-' + ('00' + m[2]).slice(-3) : s;
+}
 function classify(x) {
-  var s = String(x || '').trim().toUpperCase();
+  var s = lidNorm(String(x || '').replace(/\s+/g, '').toUpperCase());
   if (LID_RE.test(s) || UID_RE.test(s)) return { kind:'lid', value:s };
   var c = ssccCore(s);
   if (c) return { kind:'sscc', value:ssccShow(c), checkOk:gs1Ok(c) };
@@ -496,7 +505,7 @@ function mitFrist(p, ms) {
 var MELDUNG_FUER = { already_shipped:'palShipped', empty:'emptyPal', readonly:'readonly',
                      forbidden:'forbidden', unknown:'notFound', received_elsewhere:'recvElse',
                      not_mine:'recvElse', bound_elsewhere:'boundElse', void:'voided',
-                     received:'received', not_shipped:'recvNotShipped' };
+                     received:'received', not_shipped:'recvNotShipped', picked_elsewhere:'pickedElse' };
 
 function darf(aktion) {
   if (cfg.rechte) return cfg.rechte.indexOf(aktion) >= 0;
@@ -538,6 +547,8 @@ function warte(ms) { return new Promise(function (fertig) { setTimeout(fertig, m
 var cache = ls(K.cache) || { at:0, verteilungen:[], labels:[] };
 var byLid = {};
 
+var syncSek = 10, syncLauf = null, autoUhr = 0;
+
 function aufPalette(sscc) {
   return (cache.labels || []).filter(function (l) {
     return splitMulti(l.sscc).some(function (x) { return ssccEq(x, sscc); });
@@ -573,6 +584,8 @@ function cacheAbholen(lid, an, zeit) {
   var c = byLid[lid];
   if (!c || String(c.status) === '已出货') return;
   c.pickedAt = an ? (c.pickedAt || zeit || new Date().toISOString()) : '';
+  c.pickedBy = an ? (c.pickedBy || cfg.who || '') : '';
+  c.fremd = false;
   if (an && c.status === '待绑定') c.status = '已抓货';
   if (!an && c.status === '已抓货') c.status = '待绑定';
 }
@@ -647,19 +660,54 @@ function queueShow() {
   if (pal) palRender();
 }
 
-function sync() {
+function sync(voll) {
+  if (syncLauf) {
+    if (!voll) return syncLauf;
+    return syncLauf.then(function () { return sync(true); });
+  }
   var ab = fertigNr;
-  return apiGet('sync').then(function (d) {
+  var params = !voll && cache.stand ? { stand:cache.stand } : {};
+  syncLauf = apiGet('sync', params).then(function (d) {
     if (!d.ok) throw new Error(d.error);
-    cache = { at:Date.now(), verteilungen:d.verteilungen || [], labels:d.labels || [] };
+    if (d.sek !== undefined) syncSek = Number(d.sek) || 0;
+    if (d.same) { setNet(true); return true; }
+    cache = { at:Date.now(), stand:String(d.stand || ''), verteilungen:d.verteilungen || [], labels:d.labels || [] };
     byLid = {};
     cache.labels.forEach(function (l) { byLid[l.lid] = l; });
 
     fertigeAuftraege.forEach(function (e) { if (e.nr > ab) cacheAnwenden(e.job); });
     queue.forEach(cacheAnwenden);
     ls(K.cache, cache); reindex(); setNet(true);
+    pickNachladen();
     return true;
   }).catch(function () { setNet(false); return false; });
+  syncLauf.then(function () { syncLauf = null; });
+  return syncLauf;
+}
+
+function autoPlanen(ms) {
+  if (autoUhr) clearTimeout(autoUhr);
+  autoUhr = 0;
+  if (!(syncSek > 0)) return;
+  autoUhr = setTimeout(autoTick, ms === undefined ? syncSek * 1000 : ms);
+}
+function autoTick() {
+  autoUhr = 0;
+  var still = !cfg.tok || !darf('sync') || imSetup || document.hidden || navigator.onLine === false ||
+              laedt || flushing;
+  if (still) { autoPlanen(); return; }
+  sync().then(function () { autoPlanen(); });
+}
+
+function labelUebernehmen(l) {
+  var c = l && byLid[l.lid];
+  if (!c) return;
+  c.status = String(l.status || c.status);
+  c.pickedAt = l.pickedAt || '';
+  c.pickedBy = l.pickedBy || '';
+  c.fremd = !!l.fremd;
+  if (Array.isArray(l.sscc)) c.sscc = l.sscc.join('|');
+  ls(K.cache, cache);
 }
 
 function enqueue(job) { queue.push(job); ls(K.queue, queue); queueShow(); flush(); }
@@ -681,7 +729,7 @@ function flushSchritt() {
   if (!queue.length) {
     if (!abgelehnt) return Promise.resolve('leer');
     abgelehnt = false;
-    return sync().then(function () { return 'leer'; });
+    return sync(true).then(function () { return 'leer'; });
   }
   var job = queue[0];
   return mitFrist(apiPost(job.action, job.body), FLUSH_FRIST).then(function (d) {
@@ -705,6 +753,8 @@ function flushSchritt() {
       else flash('bad', d.error || d.code || '', wo);
 
       if (job.action === 'receivePallet') empLokalMerken(job.body.sscc, null);
+
+      if (d.label) { labelUebernehmen(d.label); pickNachladen(); }
     }
 
     var nein = d.ok && d.results ? d.results.filter(function (r) { return !r.ok; }) : [];
@@ -743,6 +793,8 @@ function flushSchritt() {
 }
 window.addEventListener('online', function () { setNet(true); flush(); });
 window.addEventListener('offline', function () { setNet(false); });
+
+document.addEventListener('visibilitychange', function () { if (!document.hidden) autoPlanen(500); });
 
 var mode = 'pick';
 
@@ -906,9 +958,6 @@ function palRender() {
       palRender();
     };
   });
-
-  var gespeichert = raus ? String(info.shippedNote || '') : '';
-  notizZeigen($('palNote'), raus ? !!gespeichert : darf('bindShip'), raus, raus ? gespeichert : pal.notiz);
   var ok = $('btnCommit');
   if (raus) {
     show(ok, !angenommen && darf('unshipPallet'));
@@ -930,8 +979,7 @@ function palBuchen() {
   var raus = p.zustand === 'shipped';
   if (!raus && !p.lids.length) return;
   var job = raus ? { action:'unshipPallet', body:{ sscc:p.sscc } }
-                 : { action:'bindShip', body:{ sscc:p.sscc, lids:palNeu(p).map(function (l) { return l.lid; }),
-                                               note:String(p.notiz || '').trim() } };
+                 : { action:'bindShip', body:{ sscc:p.sscc, lids:palNeu(p).map(function (l) { return l.lid; }) } };
   var ungepickt = raus ? 0 : p.lids.filter(function (l) { return !istUm(l.lid) && !gepickt(l.lid); }).length;
   var namen = filialenVon(p.lids);
   if (!namen.length && p.info && p.info.store) namen = splitMulti(p.info.store);
@@ -987,7 +1035,7 @@ function doBind(c) {
 
     if (pal && palNeu(pal).length) { flashT('warn', 'shipBusy', pal.sscc.slice(-6)); return; }
     var vorhanden = palVorhanden(c.value);
-    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null, notiz:'',
+    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null,
             zustand:palZustandMit(c.value, palZustand(vorhanden)) };
     palRender();
     if (pal.zustand === 'shipped') flashT('warn', 'shipped');
@@ -1045,26 +1093,61 @@ function doPick(c) {
   if (pk) {
     if (pk.lid === c.value) return;
 
-    if (pk.art !== 'info') { flashT('warn', 'shipBusy', pk.lid.slice(-6)); return; }
+    if (pk.art === 'annehmen' || pk.art === 'stornieren') { flashT('warn', 'shipBusy', pk.lid.slice(-6)); return; }
   }
   if (byLid[c.value]) return pickZeigen(byLid[c.value]);
 
   var lid = c.value;
   flashT('', 'reading');
-  return sync().then(function () {
+  return sync(true).then(function () {
     if (pk) return;
     if (byLid[lid]) pickZeigen(byLid[lid]);
     else flashT('bad', 'unknown', lid);
   });
 }
 
-function pickZeigen(l) {
-  var art = String(l.status) === '已出货' ? 'info' : gepickt(l.lid) ? 'stornieren' : 'annehmen';
-  pk = { lid:l.lid, l:l, art:art, zeit:new Date().toISOString() };
-  pickRender();
-  if (art === 'info') flashT('bad', 'palShipped', l.lid.slice(-6));
-  else if (art === 'stornieren') flashT('warn', 'pickUndoAsk');
+function pickArt(l) {
+  if (String(l.status) === '已出货') return 'info';
+  var eigen = pickAusstehend(l.lid);
+  if (eigen) return eigen === 'an' ? 'stornieren' : 'annehmen';
+  if (l.pickedAt && l.fremd) return 'fremd';
+  return gepickt(l.lid) ? 'stornieren' : 'annehmen';
+}
+
+function pickMelden(p) {
+  var l = p.l;
+  if (p.art === 'info') flashT('bad', 'palShipped', l.lid.slice(-6));
+  else if (p.art === 'fremd') flashT('bad', 'pickedElse', wannWer(l.pickedBy, l.pickedAt));
+  else if (p.art === 'stornieren') flashT('warn', 'pickUndoAsk');
   else flash('', l.store, l.seq + '/' + l.total + kartonText(l.kartons));
+}
+
+function wannWer(wer, wann) {
+  return String(wer || '') + (kurzZeit(wann) ? ' ' + kurzZeit(wann) : '');
+}
+
+function pickZeigen(l) {
+  pk = { lid:l.lid, l:l, art:pickArt(l), zeit:new Date().toISOString() };
+  pickRender();
+  pickMelden(pk);
+  pickPruefen(pk);
+}
+
+function pickPruefen(p) {
+  if (p.art === 'info' || pickAusstehend(p.lid)) return Promise.resolve();
+  return mitFrist(apiGet('lookup', { q:p.lid }), 4000).then(function (d) {
+    if (pk !== p || !d || !d.ok || !d.found || !d.label) return;
+    labelUebernehmen(d.label);
+    pickNachladen();
+  }).catch(function () {});
+}
+
+function pickNachladen() {
+  if (!pk || !byLid[pk.lid]) return;
+  var vorher = pk.art;
+  pk.l = byLid[pk.lid];
+  pk.art = pickArt(pk.l);
+  if (pk.art !== vorher) { pickRender(); pickMelden(pk); }
 }
 
 function pickRender() {
@@ -1072,11 +1155,12 @@ function pickRender() {
   if (!pk) return;
   var l = pk.l, liste = listenName(l.vid);
   $('pickStore').textContent = l.store || '–';
-  $('pickStore').className = 'big' + (pk.art === 'info' ? ' versendet' : '');
+  $('pickStore').className = 'big' + (pk.art === 'info' || pk.art === 'fremd' ? ' versendet' : '');
   $('pickCont').textContent = liste;
   $('pickNr').textContent = l.lid + '  ' + l.seq + '/' + l.total + kartonText(l.kartons);
   var text = '', teil = false;
   if (pk.art === 'info') text = t('palShipped');
+  else if (pk.art === 'fremd') text = t('pickedElse') + ': ' + wannWer(l.pickedBy, l.pickedAt);
   else if (pk.art === 'stornieren') {
     text = t('pickUndoAsk') + (kurzZeit(l.pickedAt) ? ' ' + kurzZeit(l.pickedAt) : '');
     teil = true;
@@ -1088,7 +1172,7 @@ function pickRender() {
   show(ok, !!knopf);
   ok.className = 'b' + (pk.art === 'stornieren' ? ' rot' : '');
   ok.textContent = t(knopf || 'pickConfirm');
-  $('btnPickNo').textContent = t(pk.art === 'info' ? 'close' : 'cancel');
+  $('btnPickNo').textContent = t(knopf ? 'cancel' : 'close');
 }
 
 function pickBuchen() {
@@ -1195,7 +1279,7 @@ function empStand(e) {
 
 function empPruefen(c) {
   var e = emp = { art:'pruefen', code:c.value, sscc:c.kind === 'sscc' ? c.value : '', lids:[],
-                  store:'', gesehen:{}, info:null, pruefen:true, sende:false, offline:false, notiz:'',
+                  store:'', gesehen:{}, info:null, pruefen:true, sende:false, offline:false,
                   zeit:new Date().toISOString() };
   if (c.kind === 'lid') e.gesehen[c.value] = true;
   empRender();
@@ -1305,10 +1389,6 @@ function empRender() {
       '</div>';
   }).join('');
 
-  var gespeichert = e.art === 'stornieren' ? String(p.receivedNote || '') : '';
-  notizZeigen($('recvNote'), e.art === 'annehmen' || !!gespeichert, e.art !== 'annehmen' || e.sende,
-              e.art === 'annehmen' ? e.notiz : gespeichert);
-
   var knopf = e.art === 'annehmen' ? 'recvConfirm' : e.art === 'stornieren' ? 'recvUndo' : '';
   var ok = $('btnRecvOk');
   show(ok, !!knopf || e.pruefen);
@@ -1324,7 +1404,6 @@ function empBuchen() {
   var an = e.art === 'annehmen';
   var aktion = e.uid ? (an ? 'receiveUmlagerung' : 'unreceiveUmlagerung') : (an ? 'receivePallet' : 'unreceivePallet');
   var body = e.uid ? { uid:e.uid, scannedAt:e.zeit } : { sscc:e.sscc, scannedAt:e.zeit };
-  if (an) body.note = String(e.notiz || '').trim();
   var wo = (e.uid || e.sscc).slice(-6);
   function erledigt(art, key) {
 
@@ -1433,6 +1512,11 @@ function renderVerteilungen() {
 }
 
 var stream = null, detector = null, timer = 0, zx = null, zxCanvas = null;
+
+var scanSeit = 0, scanTipp = false, SCAN_TIPP_MS = 6000;
+
+var spur = null, zoomAn = false, zoomOptisch = null, lichtAn = false;
+
 function hints() {
   var h = new Map();
   h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128]);
@@ -1448,38 +1532,122 @@ function nativeDetector() {
     return new window.BarcodeDetector({ formats:['qr_code','code_128'] });
   }).catch(function () { return null; });
 }
-function zxDecodeFrame(v) {
-  var w = v.videoWidth, h = v.videoHeight;
-  if (!w || !h) return null;
-  var scale = w > 1280 ? 1280 / w : 1;
-  var cw = Math.round(w * scale), ch = Math.round(h * scale);
+
+function zxLesen(v, a, dw, filter) {
+  var dh = Math.round(a.h * dw / a.w);
   if (!zxCanvas) zxCanvas = document.createElement('canvas');
-  if (zxCanvas.width !== cw || zxCanvas.height !== ch) { zxCanvas.width = cw; zxCanvas.height = ch; }
-  zxCanvas.getContext('2d', { willReadFrequently:true }).drawImage(v, 0, 0, cw, ch);
+  if (zxCanvas.width !== dw || zxCanvas.height !== dh) { zxCanvas.width = dw; zxCanvas.height = dh; }
+  var g = zxCanvas.getContext('2d', { willReadFrequently:true });
+  g.drawImage(v, a.x, a.y, a.w, a.h, 0, 0, dw, dh);
+  if (filter) filter(g, dw, dh);
   var src = new ZXing.HTMLCanvasElementLuminanceSource(zxCanvas);
   var bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(src));
   try { return zx.decodeWithState(bmp); } catch (e) { return null; }
 }
+function ausschnitt(w, h, anteil) {
+  var aw = Math.round(w * anteil), ah = Math.round(h * anteil);
+  return { x:Math.round((w - aw) / 2), y:Math.round((h - ah) / 2), w:aw, h:ah };
+}
+
+function zxGanz(v) {
+  var a = ausschnitt(v.videoWidth, v.videoHeight, zoomAn && !zoomOptisch ? 0.5 : 1);
+  return zxLesen(v, a, Math.min(a.w, 1280), null);
+}
+
+function zxMitte(v, entspiegelt) {
+  var a = ausschnitt(v.videoWidth, v.videoHeight, zoomAn && !zoomOptisch ? 0.35 : 0.6);
+  return zxLesen(v, a, Math.min(a.w, 1600), entspiegelt ? entspiegeln : null);
+}
+
+var ENTSPIEGEL_K = 5;
+function entspiegeln(g, w, h) {
+  var bild = g.getImageData(0, 0, w, h), d = bild.data, n = w * h;
+  var grau = new Uint8Array(n), tmp = new Uint8Array(n), r = (ENTSPIEGEL_K - 1) >> 1;
+  var x, y, k, i, m, v, y0, y1;
+  for (i = 0; i < n; i++) grau[i] = (d[i * 4] * 77 + d[i * 4 + 1] * 151 + d[i * 4 + 2] * 28) >> 8;
+  for (y = 0; y < h; y++) {
+    y0 = Math.max(0, y - r); y1 = Math.min(h - 1, y + r);
+    for (x = 0; x < w; x++) {
+      m = 255;
+      for (k = y0; k <= y1; k++) { v = grau[k * w + x]; if (v < m) m = v; }
+      tmp[y * w + x] = m;
+    }
+  }
+  for (y = 0; y < h; y++) {
+    y0 = Math.max(0, y - r); y1 = Math.min(h - 1, y + r);
+    for (x = 0; x < w; x++) {
+      m = 0;
+      for (k = y0; k <= y1; k++) { v = tmp[k * w + x]; if (v > m) m = v; }
+      i = (y * w + x) * 4;
+      d[i] = d[i + 1] = d[i + 2] = m;
+    }
+  }
+  g.putImageData(bild, 0, 0);
+}
+
 function scanLoop(v) {
-  var useNative = !!detector, nativeMiss = 0;
+  var schritt = 0, zxN = 0;
+  scanSeit = Date.now(); scanTipp = false;
+  function treffer(text) { scanSeit = Date.now(); onScan(text); }
+
+  function zxVersuch() {
+    if (!zx) { zx = new ZXing.MultiFormatReader(); zx.setHints(hints()); }
+    zxN++;
+    var r = zxN % 2 ? zxMitte(v, zxN % 8 === 7) : zxGanz(v);
+    if (r) treffer(r.getText());
+    return !!r;
+  }
+  function tipp() {
+    if (!scanTipp && Date.now() - scanSeit > SCAN_TIPP_MS) { scanTipp = true; flashT('', 'tipGlare'); }
+  }
   (function tick() {
     if (!stream) return;
     if (v.readyState < 2 || !v.videoWidth) { timer = setTimeout(tick, 120); return; }
-    if (useNative) {
+    schritt++;
+    tipp();
+    if (detector) {
+
       detector.detect(v).then(function (c) {
-        if (c && c.length) { nativeMiss = 0; onScan(c[0].rawValue); }
-        else if (++nativeMiss > 60) useNative = false;
-      }).catch(function () { useNative = false; }).then(function () {
-        if (stream) timer = setTimeout(tick, 180);
+        if (c && c.length) treffer(c[0].rawValue);
+        else if (schritt % 2 === 0) zxVersuch();
+      }).catch(function () { detector = null; }).then(function () {
+        if (stream) timer = setTimeout(tick, 150);
       });
       return;
     }
-    if (!zx) { zx = new ZXing.MultiFormatReader(); zx.setHints(hints()); }
-    var r = zxDecodeFrame(v);
-    if (r) onScan(r.getText());
-    timer = setTimeout(tick, r ? 400 : 120);
+    var r = zxVersuch();
+    timer = setTimeout(tick, r ? 400 : 100);
   })();
 }
+
+function kameraKnoepfe() {
+  var caps = {};
+  try { caps = spur && spur.getCapabilities ? spur.getCapabilities() || {} : {}; } catch (e) {}
+  zoomOptisch = caps.zoom && caps.zoom.max > 1 ? caps.zoom : null;
+  zoomAn = false; lichtAn = false;
+  show($('btnZoom'), true);
+  show($('btnTorch'), caps.torch === true);
+  kameraZeigen();
+}
+function kameraZeigen() {
+  $('btnZoom').classList.toggle('an', zoomAn);
+  $('btnTorch').classList.toggle('an', lichtAn);
+  $('video').style.transform = zoomAn && !zoomOptisch ? 'scale(2)' : '';
+}
+function spurSetzen(was) {
+  if (!spur || !spur.applyConstraints) return Promise.resolve();
+  return spur.applyConstraints({ advanced:[was] }).catch(function () {});
+}
+$('btnZoom').onclick = function () {
+  zoomAn = !zoomAn;
+  if (zoomOptisch) spurSetzen({ zoom: zoomAn ? Math.min(2, zoomOptisch.max) : (zoomOptisch.min || 1) });
+  kameraZeigen();
+};
+$('btnTorch').onclick = function () {
+  lichtAn = !lichtAn;
+  spurSetzen({ torch: lichtAn });
+  kameraZeigen();
+};
 
 var kameraStartet = false;
 function startCam() {
@@ -1488,8 +1656,9 @@ function startCam() {
   kameraStartet = true;
   beep('ok');
   var v = $('video');
+
   navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1920 }, height:{ ideal:1080 } }, audio:false
+    video:{ facingMode:{ ideal:'environment' }, width:{ ideal:3840 }, height:{ ideal:2160 } }, audio:false
   }).then(function (s) {
     kameraStartet = false;
 
@@ -1498,6 +1667,8 @@ function startCam() {
       throw new Error('stand');
     }
     stream = s; v.srcObject = s;
+    spur = s.getVideoTracks ? s.getVideoTracks()[0] || null : null;
+    kameraKnoepfe();
     show($('cam'), true); $('btnCam').textContent = t('camOff');
     return v.play().catch(function () {});
   }).then(nativeDetector).then(function (d) {
@@ -1513,7 +1684,10 @@ function stopCam() {
   if (timer) { clearTimeout(timer); timer = 0; }
   detector = null;
   if (stream) { stream.getTracks().forEach(function (x) { x.stop(); }); stream = null; }
+  spur = null; zoomAn = false; lichtAn = false;
   $('video').srcObject = null;
+  $('video').style.transform = '';
+  show($('btnZoom'), false); show($('btnTorch'), false);
   show($('cam'), false); $('btnCam').textContent = t('cam');
 }
 $('btnCam').onclick = function () { stream ? stopCam() : startCam(); };
@@ -1540,7 +1714,9 @@ $('manForm').onsubmit = function (e) {
   onScan(v); $('manual').value = ''; $('manHint').textContent = '';
 };
 $('manual').oninput = function () {
-  var d = $('manual').value.replace(/[^0-9]/g, '');
+  var roh = $('manual').value, d = roh.replace(/[^0-9]/g, ''), c = classify(roh);
+
+  if (c.kind === 'lid') { $('manHint').textContent = c.value; return; }
   if (d.length >= 18) {
     $('manHint').innerHTML = gs1Ok(d)
       ? '<span style="color:var(--ok)">&#10003;</span>'
@@ -1556,8 +1732,6 @@ $('btnPickOk').onclick = function () { pickBuchen(); };
 $('btnPickNo').onclick = function () { pickAbbrechen(); };
 $('btnRecvOk').onclick = function () { empBuchen(); };
 $('btnRecvNo').onclick = function () { empAbbrechen(); };
-$('palNote').oninput = function () { if (pal && pal.zustand !== 'shipped') pal.notiz = $('palNote').value; };
-$('recvNote').oninput = function () { if (emp && emp.art === 'annehmen' && !emp.sende) emp.notiz = $('recvNote').value; };
 
 $('btnSync').onclick = function () {
   if (laedt) return;
@@ -1565,16 +1739,18 @@ $('btnSync').onclick = function () {
   laedt = true;
   b.disabled = true;
   b.innerHTML = SPINNER;
-  sync().then(function (ok) {
+  sync(true).then(function (ok) {
     laedt = false;
     b.disabled = false;
     b.textContent = t('reload');
     if (ok) flashT('ok', 'reload'); else flashT('bad', 'offline');
+    autoPlanen();
   });
 };
 $('lang').onclick = function () { lang = lang === 'zh' ? 'de' : 'zh'; ls(K.lang, lang); applyLang(); };
 
 function openSetup(on) {
+  imSetup = !!on;
   show($('setup'), on); show($('app'), !on);
   if (!on) return;
   $('cfgCode').value = '';
@@ -1583,7 +1759,11 @@ function openSetup(on) {
   $('meName').textContent = cfg.who || '';
   $('meRole').textContent = cfg.rolle || (cfg.rw ? '' : t('readonly'));
 }
-$('gear').onclick = function () { openSetup($('setup').classList.contains('hide')); };
+
+$('gear').onclick = function () {
+  if (!cfg.tok) return;
+  openSetup(!imSetup);
+};
 
 function setPairBusy(on) {
   pairBusy = on;
@@ -1641,7 +1821,7 @@ function boot() {
   werBinIch().then(function () {
     reiterRichten();
     return darf('sync') ? sync() : null;
-  }).then(flush);
+  }).then(flush).then(function () { autoPlanen(); });
 }
 
 function werBinIch() {
