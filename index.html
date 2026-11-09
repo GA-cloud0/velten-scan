@@ -156,7 +156,7 @@
 <section id="setup" class="hide" style="padding:10px">
   <div id="pairBox">
     <div class="lbl" data-t="code">Code</div>
-    <input id="cfgCode" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="6">
+    <input id="cfgCode" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24">
     <div style="height:10px"></div>
     <button id="cfgPair" class="b w" data-t="save">OK</button>
   </div>
@@ -254,7 +254,15 @@ var TXT = {
         otherStore:'Andere Filiale', boundElse:'Klebt schon woanders',
         check:'Pruefziffer falsch', offline:'Offline', noRead:'Nichts erkannt',
         noCam:'Scannen nicht moeglich', reading:'…', dropped:'Verworfen', notFound:'Nicht gefunden',
-        needPair:'Anmelden', pairFail:'Kopplung fehlgeschlagen', readonly:'Nur Lesen',
+        needPair:'Anmelden', pairFail:'Kopplung fehlgeschlagen',
+        pairNoApi:'Scan-Link fehlt. Bitte den vollstaendigen Link erneut oeffnen.',
+        pairWrongApi:'Scan-Link ist ungueltig oder veraltet.',
+        pairCodeLength:'Bitte den sechsstelligen Code eingeben.',
+        pairLocked:'Zu viele Fehlversuche. Bitte spaeter erneut versuchen.',
+        pairBadCode:'Code ungueltig oder abgelaufen.',
+        pairTooMany:'Zu viele Geraete mit diesem Zugang gekoppelt.',
+        pairTimeout:'Serverantwort dauert laenger als 30 Sekunden.',
+        pairNetwork:'Keine Serverantwort. Bitte Verbindung pruefen.', readonly:'Nur Lesen',
         palShipped:'Schon ausgeliefert', palPartial:'Teilweise ausgeliefert',
         emptyPal:'Nichts gebunden', confirmShip:'Ausgang buchen', cancel:'Abbrechen',
         shipDone:'Ausgang gebucht', queued:'Wird gesendet',
@@ -281,7 +289,15 @@ var TXT = {
         otherStore:'门店不符', boundElse:'已绑其他板',
         check:'校验位错误', offline:'离线', noRead:'未识别',
         noCam:'无法扫描', reading:'…', dropped:'已取消', notFound:'未找到',
-        needPair:'请先配对', pairFail:'配对失败', readonly:'只读',
+        needPair:'请先配对', pairFail:'配对失败',
+        pairNoApi:'缺少服务地址，请重新打开完整的扫码链接。',
+        pairWrongApi:'扫码链接无效或已过期。',
+        pairCodeLength:'请输入六位配对码。',
+        pairLocked:'错误尝试次数过多，请稍后再试。',
+        pairBadCode:'配对码无效或已过期。',
+        pairTooMany:'该账号已达到设备数量上限。',
+        pairTimeout:'服务器超过30秒仍未响应。',
+        pairNetwork:'未收到服务器响应，请检查网络连接。', readonly:'只读',
         palShipped:'该板已出货', palPartial:'该板部分已出货',
         emptyPal:'板上无贴纸', confirmShip:'确认出货', cancel:'取消',
         shipDone:'出货完成', queued:'待发送',
@@ -1889,29 +1905,36 @@ function setPairBusy(on) {
 $('cfgPair').onclick = function () {
   if (pairBusy) return;
 
-  var code = $('cfgCode').value.trim().toUpperCase();
-  if (!apiOk(cfg.api) || !code) { $('cfgMsg').textContent = t('pairFail'); return; }
+  var code = pairCode($('cfgCode').value);
+  if (!cfg.api) { $('cfgMsg').textContent = t('pairNoApi'); return; }
+  if (!apiOk(cfg.api)) { $('cfgMsg').textContent = t('pairWrongApi'); return; }
+  if (code.length !== 6) { $('cfgMsg').textContent = t('pairCodeLength'); return; }
   $('cfgMsg').textContent = '';
   setPairBusy(true);
 
   var frist = setTimeout(function () {
     if (!pairBusy) return;
     setPairBusy(false);
-    $('cfgMsg').textContent = t('pairFail');
+    $('cfgMsg').textContent = t('pairTimeout');
   }, 30000);
   apiPost('pair', { code:code }).then(function (d) {
     clearTimeout(frist);
     setPairBusy(false);
 
-    if (!d.ok) { $('cfgMsg').textContent = t('pairFail'); return; }
+    if (!d || !d.ok) {
+      var known = { locked:'pairLocked', badcode:'pairBadCode', toomany:'pairTooMany' };
+      $('cfgMsg').textContent = d && known[d.code] ? t(known[d.code]) :
+        t('pairFail') + ': ' + ((d && (d.error || d.code)) || '?');
+      return;
+    }
     cfg.tok = d.token; cfg.who = d.who; cfg.rw = !!d.rw;
     cfg.rolle = d.role || ''; cfg.rechte = d.rechte || null;
     ls(K.cfg, cfg);
     boot();
-  }).catch(function () {
+  }).catch(function (err) {
     clearTimeout(frist);
     setPairBusy(false);
-    $('cfgMsg').textContent = t('pairFail');
+    $('cfgMsg').textContent = t('pairNetwork') + (err && err.name ? ' (' + err.name + ')' : '');
   });
 };
 
@@ -1920,11 +1943,12 @@ $('cfgUnpair').onclick = function () {
   openSetup(true);
 };
 
-$('cfgCode').oninput = function () {
-  this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-};
+function pairCode(value) {
+  return String(value || '').normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+}
+$('cfgCode').oninput = function () { this.value = pairCode(this.value); };
 
-var BUILD = '30083e4fbf73';
+var BUILD = 'f8f14d706c0a';
 var VERSION_TAKT = 600000, VERSION_FRIST = 900000;
 var versionUhr = 0, versionZiel = '', neuUhr = 0, versionZuletzt = 0;
 
