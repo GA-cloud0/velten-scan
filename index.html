@@ -65,8 +65,15 @@
   button.b.w { width:100%; }
   input { width:100%; padding:13px; font-size:17px; border-radius:10px; border:1px solid var(--line);
     background:var(--bg); color:var(--text); margin-top:8px; }
-  #palStore { width:100%; padding:13px; font-size:17px; border-radius:10px;
+  #palStoreSearch { width:100%; padding:13px; font-size:17px; border-radius:10px;
     border:2px solid var(--gruen); background:var(--bg); color:var(--text); margin-top:6px; }
+  #palStoreChoices { max-height:32vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    border:1px solid var(--line); border-radius:9px; margin-top:5px; background:var(--bg); }
+  #palStoreChoices button { display:block; width:100%; padding:12px; border:0;
+    border-bottom:1px solid var(--line); background:var(--bg); color:var(--text);
+    text-align:left; font-size:16px; }
+  #palStoreChoices button:last-child { border-bottom:0; }
+  #palStoreChoices .hint { padding:10px; }
 
   .camTools { position:absolute; right:8px; bottom:8px; display:flex; gap:6px; }
   .camTools button { border:0; border-radius:8px; padding:6px 11px; font-size:15px; font-weight:800;
@@ -213,8 +220,11 @@
         <div class="big" id="storeBig">&ndash;</div>
         <div class="sscc" id="ssccTxt"></div>
         <div id="palStoreBox">
-          <label class="lbl" for="palStore" data-t="chooseStore">Filiale fuer diese Palette waehlen</label>
-          <select id="palStore" required></select>
+          <label class="lbl" for="palStoreSearch" data-t="chooseStore">Filiale fuer diese Palette waehlen</label>
+          <input id="palStoreSearch" type="search" autocomplete="off" data-ph="storeSearch"
+                 placeholder="Filiale suchen" role="combobox" aria-autocomplete="list"
+                 aria-controls="palStoreChoices" aria-expanded="false">
+          <div id="palStoreChoices" class="hide" role="listbox"></div>
         </div>
         <div id="palStoreWarn" class="banner"></div>
         <div id="palBanner" class="banner"></div>
@@ -260,8 +270,9 @@ var TXT = {
         already:'Schon drauf', unknown:'Unbekannt', needCode:'Erst Barcode',
         otherStore:'Andere Filiale', boundElse:'Klebt schon woanders',
         chooseStore:'Filiale fuer diese Palette waehlen',
+        storeSearch:'Filiale suchen', storeNoMatch:'Keine passende Filiale',
         storeRequired:'Vor dem Scannen der Scheine eine Filiale waehlen.',
-        storeListEmpty:'Keine Filialen geladen. Bitte Verbindung und Serverversion pruefen.',
+        storeListEmpty:'Keine Filialen geladen. Bitte filialen.txt und Verbindung pruefen.',
         storeMismatch:'Filiale stimmt nicht ueberein',
         storeMismatchConfirm:'Die gewaehlte Filiale stimmt nicht mit allen Scheinen ueberein. Trotzdem Ausgang buchen?',
         check:'Pruefziffer falsch', offline:'Offline', noRead:'Nichts erkannt',
@@ -300,8 +311,9 @@ var TXT = {
         already:'已在本板', unknown:'未知编号', needCode:'请先扫条码',
         otherStore:'门店不符', boundElse:'已绑其他板',
         chooseStore:'请选择此托盘所属门店',
+        storeSearch:'搜索门店', storeNoMatch:'没有匹配的门店',
         storeRequired:'扫描分货单前必须先选择门店。',
-        storeListEmpty:'未加载门店列表，请检查网络及云端版本。',
+        storeListEmpty:'未加载门店列表，请检查 filialen.txt 和网络连接。',
         storeMismatch:'分货单门店与所选门店不一致',
         storeMismatchConfirm:'所选门店与部分分货单不一致，仍要确认出货吗？',
         check:'校验位错误', offline:'离线', noRead:'未识别',
@@ -589,7 +601,27 @@ function merkeFertig(job) {
 var FLUSH_VERSUCHE = 3, FLUSH_FRIST = 30000, versuche = 0;
 function warte(ms) { return new Promise(function (fertig) { setTimeout(fertig, ms); }); }
 var cache = ls(K.cache) || { at:0, verteilungen:[], labels:[], filialen:[] };
+var filialenLokal = [];
 var byLid = {};
+
+function lokaleFilialenLaden() {
+  return fetch('filialen.txt', { cache:'no-store' }).then(function (r) {
+    if (!r.ok) throw new Error('filialen.txt: ' + r.status);
+    return r.text();
+  }).then(function (inhalt) {
+    var gesehen = {}, namen = [];
+    inhalt.split(/\r?\n/).forEach(function (zeile) {
+      var name = zeile.replace(/\s+/g, ' ').trim();
+      if (!name || name.charAt(0) === '#') return;
+      var key = name.toLowerCase();
+      if (gesehen[key]) return;
+      gesehen[key] = true;
+      namen.push(name);
+    });
+    filialenLokal = namen.sort(function (a, b) { return a.localeCompare(b); });
+    if (pal) palRender();
+  }).catch(function () { if (pal) palRender(); });
+}
 
 var syncSek = 10, syncLauf = null, autoUhr = 0;
 
@@ -954,7 +986,15 @@ function andereFilialen(p) {
   return filialenVon(p.lids).filter(function (s) { return storeKey(s) !== storeKey(p.selectedStore); });
 }
 function storeAuswahl() {
-  return Array.isArray(cache.filialen) ? cache.filialen : [];
+  return Array.isArray(cache.filialen) && cache.filialen.length ? cache.filialen : filialenLokal;
+}
+function storeSuche(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+function filialenTreffer(query) {
+  var q = storeSuche(query);
+  return storeAuswahl().filter(function (name) { return storeSuche(name).indexOf(q) >= 0; });
 }
 
 function palNeu(p) {
@@ -998,13 +1038,33 @@ function palRender() {
   $('storeBig').className = 'big' + (raus ? ' versendet' : '');
   $('ssccTxt').textContent = pal.sscc.replace(/(\d{4})(?=\d)/g, '$1 ');
   show($('palStoreBox'), !raus);
-  var auswahl = $('palStore');
   var filialen = storeAuswahl();
-  if (pal.selectedStore && filialen.indexOf(pal.selectedStore) < 0) pal.selectedStore = '';
-  var optionen = '<option value="">' + esc(t('chooseStore')) + '</option>' +
-    filialen.map(function (s) { return '<option value="' + esc(s) + '">' + esc(s) + '</option>'; }).join('');
-  if (auswahl._optionen !== optionen) { auswahl.innerHTML = optionen; auswahl._optionen = optionen; }
-  auswahl.value = pal.selectedStore || '';
+  if (pal.selectedStore && filialen.indexOf(pal.selectedStore) < 0) {
+    pal.selectedStore = ''; pal.storeQuery = '';
+  }
+  var suche = $('palStoreSearch'), query = pal.storeQuery || '';
+  if (suche.value !== query) suche.value = query;
+  suche.setAttribute('aria-expanded', !!pal.storeOpen && !raus ? 'true' : 'false');
+  var treffer = pal.storeOpen && !raus ? filialenTreffer(query) : [];
+  var liste = $('palStoreChoices');
+  show(liste, !!pal.storeOpen && !raus);
+  if (pal.storeOpen && !raus) {
+    var html = treffer.length ? treffer.map(function (name, i) {
+      return '<button type="button" role="option" data-store="' + i + '">' + esc(name) + '</button>';
+    }).join('') : '<div class="hint">' + esc(t('storeNoMatch')) + '</div>';
+    if (liste._html !== html) { liste.innerHTML = html; liste._html = html; }
+    Array.prototype.forEach.call(liste.querySelectorAll('[data-store]'), function (b) {
+      b.onclick = function () {
+        if (!pal) return;
+        var name = treffer[Number(b.dataset.store)];
+        if (!name) return;
+        pal.selectedStore = name; pal.storeQuery = name; pal.storeOpen = false;
+        suche.blur(); palRender();
+        if (andereFilialen(pal).length)
+          flash('warn', t('storeMismatch'), name + ' / ' + andereFilialen(pal).join(' / '));
+      };
+    });
+  }
   var abweichend = pal.selectedStore ? andereFilialen(pal) : [];
   $('palStoreWarn').className = 'banner' + (!pal.selectedStore ? ' teil' : '');
   $('palStoreWarn').textContent = raus ? '' : !filialen.length ? t('storeListEmpty') :
@@ -1051,12 +1111,18 @@ function palRender() {
   $('btnDrop').textContent = t(raus ? 'close' : 'cancel');
 }
 
-$('palStore').onchange = function () {
+$('palStoreSearch').onfocus = function () {
   if (!pal) return;
-  pal.selectedStore = this.value;
+  pal.storeOpen = true;
+  this.select();
   palRender();
-  if (pal.selectedStore && andereFilialen(pal).length)
-    flash('warn', t('storeMismatch'), pal.selectedStore + ' / ' + andereFilialen(pal).join(' / '));
+};
+$('palStoreSearch').oninput = function () {
+  if (!pal) return;
+  pal.storeQuery = this.value;
+  pal.selectedStore = '';
+  pal.storeOpen = true;
+  palRender();
 };
 
 function palBuchen() {
@@ -1065,7 +1131,7 @@ function palBuchen() {
   var raus = p.zustand === 'shipped';
   if (!raus && !p.lids.length) return;
   if (!raus && !p.selectedStore) {
-    flashT('bad', 'storeRequired'); $('palStore').focus(); return;
+    flashT('bad', 'storeRequired'); $('palStoreSearch').focus(); return;
   }
   if (!raus && andereFilialen(p).length &&
       !window.confirm(t('storeMismatchConfirm') + '\n' + p.selectedStore + ' / ' + andereFilialen(p).join(' / '))) return;
@@ -1128,9 +1194,11 @@ function doBind(c) {
 
     if (pal && palNeu(pal).length) { flashT('warn', 'shipBusy', pal.sscc.slice(-6)); return; }
     var vorhanden = palVorhanden(c.value);
-    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null, selectedStore:'',
+    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null,
+            selectedStore:'', storeQuery:'', storeOpen:false,
             zustand:palZustandMit(c.value, palZustand(vorhanden)) };
     palRender();
+    if (pal.zustand !== 'shipped') $('palStoreSearch').focus();
     if (pal.zustand === 'shipped') flashT('warn', 'shipped');
     else if (pal.zustand === 'partial') flashT('warn', 'newPal', '', 'palPartial');
     else if (c.checkOk) flashT('ok', 'newPal', c.value.slice(-6));
@@ -1143,7 +1211,7 @@ function doBind(c) {
   if (!darf('bindShip')) { flashT('bad', 'forbidden'); return; }
 
   if (pal.zustand === 'shipped') { flashT('bad', 'palShipped'); return; }
-  if (!pal.selectedStore) { flashT('bad', 'storeRequired'); $('palStore').focus(); scanFreigeben(); return; }
+  if (!pal.selectedStore) { flashT('bad', 'storeRequired'); $('palStoreSearch').focus(); scanFreigeben(); return; }
   var l = byLid[c.value];
   if (!l) { flashT('bad', 'unknown', c.value); return; }
   if (pal.lids.some(function (x) { return x.lid === c.value; })) { flashT('warn', 'already'); return; }
@@ -2009,7 +2077,7 @@ function pairCode(value) {
 }
 $('cfgCode').oninput = function () { this.value = pairCode(this.value); };
 
-var BUILD = 'c42e51b8d309';
+var BUILD = '3e7f0a91c642';
 var VERSION_TAKT = 600000, VERSION_FRIST = 900000;
 var versionUhr = 0, versionZiel = '', neuUhr = 0, versionZuletzt = 0;
 
@@ -2074,6 +2142,7 @@ if (cfg.api && cfg.tok) {
   openSetup(true);
   applyLang();
 }
+lokaleFilialenLaden();
 versionPlanen();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
 })();

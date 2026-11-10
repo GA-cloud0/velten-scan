@@ -1,5 +1,5 @@
-var CACHE = 'velten-scan-v9';
-var FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './logo.png',
+var CACHE = 'velten-scan-v11';
+var FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './logo.png', './filialen.txt',
              'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'];
 
 self.addEventListener('install', function (e) {
@@ -33,6 +33,17 @@ self.addEventListener('fetch', function (e) {
   if (url.indexOf('script.google.com') >= 0 || url.indexOf('googleusercontent.com') >= 0) return;
 
   if (/\/version\.txt$/.test(new URL(url).pathname)) return;
+
+  if (/\/filialen\.txt$/.test(new URL(url).pathname)) {
+    e.respondWith(fetch(e.request).then(function (res) {
+      if (res && res.status === 200) {
+        var copy = res.clone();
+        caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
+      }
+      return res;
+    }).catch(function () { return caches.match(e.request); }));
+    return;
+  }
 
   if (istSeite(e.request)) {
     if (!istScanseite(url)) return;
