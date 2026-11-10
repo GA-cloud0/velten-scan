@@ -65,6 +65,8 @@
   button.b.w { width:100%; }
   input { width:100%; padding:13px; font-size:17px; border-radius:10px; border:1px solid var(--line);
     background:var(--bg); color:var(--text); margin-top:8px; }
+  #palStore { width:100%; padding:13px; font-size:17px; border-radius:10px;
+    border:2px solid var(--gruen); background:var(--bg); color:var(--text); margin-top:6px; }
 
   .camTools { position:absolute; right:8px; bottom:8px; display:flex; gap:6px; }
   .camTools button { border:0; border-radius:8px; padding:6px 11px; font-size:15px; font-weight:800;
@@ -210,6 +212,11 @@
       <div id="palletBox" class="hide">
         <div class="big" id="storeBig">&ndash;</div>
         <div class="sscc" id="ssccTxt"></div>
+        <div id="palStoreBox">
+          <label class="lbl" for="palStore" data-t="chooseStore">Filiale fuer diese Palette waehlen</label>
+          <select id="palStore" required></select>
+        </div>
+        <div id="palStoreWarn" class="banner"></div>
         <div id="palBanner" class="banner"></div>
         <div id="lidList"></div>
         <div style="height:8px"></div>
@@ -252,6 +259,11 @@ var TXT = {
         ready:'Bereit', newPal:'Neue Palette', saved:'Gespeichert',
         already:'Schon drauf', unknown:'Unbekannt', needCode:'Erst Barcode',
         otherStore:'Andere Filiale', boundElse:'Klebt schon woanders',
+        chooseStore:'Filiale fuer diese Palette waehlen',
+        storeRequired:'Vor dem Scannen der Scheine eine Filiale waehlen.',
+        storeListEmpty:'Keine Filialen geladen. Bitte Verbindung und Serverversion pruefen.',
+        storeMismatch:'Filiale stimmt nicht ueberein',
+        storeMismatchConfirm:'Die gewaehlte Filiale stimmt nicht mit allen Scheinen ueberein. Trotzdem Ausgang buchen?',
         check:'Pruefziffer falsch', offline:'Offline', noRead:'Nichts erkannt',
         noCam:'Scannen nicht moeglich', reading:'…', dropped:'Verworfen', notFound:'Nicht gefunden',
         needPair:'Anmelden', pairFail:'Kopplung fehlgeschlagen',
@@ -287,6 +299,11 @@ var TXT = {
         ready:'就绪', newPal:'新板', saved:'已保存',
         already:'已在本板', unknown:'未知编号', needCode:'请先扫条码',
         otherStore:'门店不符', boundElse:'已绑其他板',
+        chooseStore:'请选择此托盘所属门店',
+        storeRequired:'扫描分货单前必须先选择门店。',
+        storeListEmpty:'未加载门店列表，请检查网络及云端版本。',
+        storeMismatch:'分货单门店与所选门店不一致',
+        storeMismatchConfirm:'所选门店与部分分货单不一致，仍要确认出货吗？',
         check:'校验位错误', offline:'离线', noRead:'未识别',
         noCam:'无法扫描', reading:'…', dropped:'已取消', notFound:'未找到',
         needPair:'请先配对', pairFail:'配对失败',
@@ -571,7 +588,7 @@ function merkeFertig(job) {
 }
 var FLUSH_VERSUCHE = 3, FLUSH_FRIST = 30000, versuche = 0;
 function warte(ms) { return new Promise(function (fertig) { setTimeout(fertig, ms); }); }
-var cache = ls(K.cache) || { at:0, verteilungen:[], labels:[] };
+var cache = ls(K.cache) || { at:0, verteilungen:[], labels:[], filialen:[] };
 var byLid = {};
 
 var syncSek = 10, syncLauf = null, autoUhr = 0;
@@ -697,14 +714,23 @@ function sync(voll) {
   syncLauf = apiGet('sync', params).then(function (d) {
     if (!d.ok) throw new Error(d.error);
     if (d.sek !== undefined) syncSek = Number(d.sek) || 0;
-    if (d.same) { setNet(true); return true; }
-    cache = { at:Date.now(), stand:String(d.stand || ''), verteilungen:d.verteilungen || [], labels:d.labels || [] };
+    if (d.same) {
+      if (Array.isArray(d.filialen)) {
+        cache.filialen = d.filialen;
+        ls(K.cache, cache);
+        if (pal) palRender();
+      }
+      setNet(true); return true;
+    }
+    cache = { at:Date.now(), stand:String(d.stand || ''), verteilungen:d.verteilungen || [],
+              labels:d.labels || [], filialen:Array.isArray(d.filialen) ? d.filialen : [] };
     byLid = {};
     cache.labels.forEach(function (l) { byLid[l.lid] = l; });
 
     fertigeAuftraege.forEach(function (e) { if (e.nr > ab) cacheAnwenden(e.job); });
     queue.forEach(cacheAnwenden);
     ls(K.cache, cache); reindex(); setNet(true);
+    if (pal) palRender();
     pickNachladen();
     return true;
   }).catch(function () { setNet(false); return false; });
@@ -923,6 +949,14 @@ function filialenVon(lids) {
   return Object.keys(st);
 }
 
+function storeKey(s) { return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+function andereFilialen(p) {
+  return filialenVon(p.lids).filter(function (s) { return storeKey(s) !== storeKey(p.selectedStore); });
+}
+function storeAuswahl() {
+  return Array.isArray(cache.filialen) ? cache.filialen : [];
+}
+
 function palNeu(p) {
   return p.lids.filter(function (l) { return !l.alt; });
 }
@@ -963,6 +997,19 @@ function palRender() {
   $('storeBig').textContent = namen.length ? namen.join(' / ') : '–';
   $('storeBig').className = 'big' + (raus ? ' versendet' : '');
   $('ssccTxt').textContent = pal.sscc.replace(/(\d{4})(?=\d)/g, '$1 ');
+  show($('palStoreBox'), !raus);
+  var auswahl = $('palStore');
+  var filialen = storeAuswahl();
+  if (pal.selectedStore && filialen.indexOf(pal.selectedStore) < 0) pal.selectedStore = '';
+  var optionen = '<option value="">' + esc(t('chooseStore')) + '</option>' +
+    filialen.map(function (s) { return '<option value="' + esc(s) + '">' + esc(s) + '</option>'; }).join('');
+  if (auswahl._optionen !== optionen) { auswahl.innerHTML = optionen; auswahl._optionen = optionen; }
+  auswahl.value = pal.selectedStore || '';
+  var abweichend = pal.selectedStore ? andereFilialen(pal) : [];
+  $('palStoreWarn').className = 'banner' + (!pal.selectedStore ? ' teil' : '');
+  $('palStoreWarn').textContent = raus ? '' : !filialen.length ? t('storeListEmpty') :
+    !pal.selectedStore ? t('storeRequired') :
+    abweichend.length ? t('storeMismatch') + ': ' + pal.selectedStore + ' / ' + abweichend.join(' / ') : '';
   var offen = ausstehend(pal.sscc).length;
   var text = '', teil = false;
 
@@ -998,17 +1045,30 @@ function palRender() {
   } else {
     show(ok, darf('bindShip'));
     ok.className = 'b';
-    ok.disabled = !pal.lids.length;
+    ok.disabled = !pal.lids.length || !pal.selectedStore;
     ok.textContent = t('confirmShip');
   }
   $('btnDrop').textContent = t(raus ? 'close' : 'cancel');
 }
+
+$('palStore').onchange = function () {
+  if (!pal) return;
+  pal.selectedStore = this.value;
+  palRender();
+  if (pal.selectedStore && andereFilialen(pal).length)
+    flash('warn', t('storeMismatch'), pal.selectedStore + ' / ' + andereFilialen(pal).join(' / '));
+};
 
 function palBuchen() {
   var p = pal;
   if (!p) return;
   var raus = p.zustand === 'shipped';
   if (!raus && !p.lids.length) return;
+  if (!raus && !p.selectedStore) {
+    flashT('bad', 'storeRequired'); $('palStore').focus(); return;
+  }
+  if (!raus && andereFilialen(p).length &&
+      !window.confirm(t('storeMismatchConfirm') + '\n' + p.selectedStore + ' / ' + andereFilialen(p).join(' / '))) return;
   var job = raus ? { action:'unshipPallet', body:{ sscc:p.sscc } }
                  : { action:'bindShip', body:{ sscc:p.sscc, lids:palNeu(p).map(function (l) { return l.lid; }) } };
   var ungepickt = raus ? 0 : p.lids.filter(function (l) { return !istUm(l.lid) && !gepickt(l.lid); }).length;
@@ -1068,7 +1128,7 @@ function doBind(c) {
 
     if (pal && palNeu(pal).length) { flashT('warn', 'shipBusy', pal.sscc.slice(-6)); return; }
     var vorhanden = palVorhanden(c.value);
-    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null,
+    pal = { sscc:c.value, checkOk:c.checkOk, lids:vorhanden, info:null, selectedStore:'',
             zustand:palZustandMit(c.value, palZustand(vorhanden)) };
     palRender();
     if (pal.zustand === 'shipped') flashT('warn', 'shipped');
@@ -1083,17 +1143,18 @@ function doBind(c) {
   if (!darf('bindShip')) { flashT('bad', 'forbidden'); return; }
 
   if (pal.zustand === 'shipped') { flashT('bad', 'palShipped'); return; }
+  if (!pal.selectedStore) { flashT('bad', 'storeRequired'); $('palStore').focus(); scanFreigeben(); return; }
   var l = byLid[c.value];
   if (!l) { flashT('bad', 'unknown', c.value); return; }
   if (pal.lids.some(function (x) { return x.lid === c.value; })) { flashT('warn', 'already'); return; }
 
   var andere = ssccOhne(l.sscc, pal.sscc);
   if (andere.length) { flashT('bad', 'boundElse', String(andere[0]).slice(-6)); return; }
-  var fremd = pal.lids.filter(function (x) { return x.store !== l.store; });
   pal.lids.push({ lid:l.lid, store:l.store, seq:l.seq, total:l.total, vid:l.vid, name:l.name, kartons:l.kartons });
   palRender();
   var liste = listenName(l.vid);
-  if (fremd.length) flashT('warn', 'otherStore', fremd[0].store + ' / ' + l.store);
+  if (storeKey(pal.selectedStore) !== storeKey(l.store))
+    flash('warn', t('storeMismatch'), pal.selectedStore + ' / ' + l.store);
 
   else if (istUm(l.lid)) flash('ok', l.store, t('transfer') + (l.name ? '  ' + l.name : ''));
 
@@ -1948,7 +2009,7 @@ function pairCode(value) {
 }
 $('cfgCode').oninput = function () { this.value = pairCode(this.value); };
 
-var BUILD = 'f8f14d706c0a';
+var BUILD = 'c42e51b8d309';
 var VERSION_TAKT = 600000, VERSION_FRIST = 900000;
 var versionUhr = 0, versionZiel = '', neuUhr = 0, versionZuletzt = 0;
 
