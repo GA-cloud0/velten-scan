@@ -143,6 +143,12 @@
 
   .zweit { text-align:center; font-size:17px; font-weight:700; margin:-2px 0 4px; word-break:break-word; }
   .zweit:empty { display:none; }
+  #recvWeek { margin-top:8px; }
+  #recvWeek .vk-kopf { align-items:center; }
+  #recvWeekTitle { flex:1; font-size:16px; font-weight:700; }
+  #btnRecvWeek { border:1px solid var(--line); border-radius:8px; padding:6px 10px;
+    background:var(--bg); color:var(--gruen); font-size:13px; font-weight:700; }
+  #btnRecvWeek:disabled { opacity:.6; }
 
   #recvBox.voll { position:fixed; inset:0; z-index:20; background:var(--bg); overflow-y:auto;
     display:flex; flex-direction:column; padding:calc(12px + env(safe-area-inset-top,0)) 12px
@@ -250,6 +256,15 @@
           <button id="btnRecvOk" class="b" data-t="recvConfirm">Eingang buchen</button>
         </div>
       </div>
+      <div id="recvWeek" class="vk">
+        <div class="vk-kopf">
+          <span id="recvWeekTitle" data-t="recvWeek">Diese Woche empfangen</span>
+          <button id="btnRecvWeek" type="button" data-t="reload">Laden</button>
+        </div>
+        <div id="recvWeekList"></div>
+        <div class="vk-kopf" style="margin-top:12px"><span id="recvUpcomingTitle" data-t="recvUpcoming">Naechste Lieferungen</span></div>
+        <div id="recvUpcomingList"></div>
+      </div>
     </section>
 
     <div style="height:14px"></div>
@@ -292,6 +307,8 @@ var TXT = {
         shipBusy:'Erst buchen oder abbrechen', pending:'Noch nicht gesendet',
         shipHeld:'Ausgang angehalten - neu bestaetigen', voided:'Entwertet',
         recv:'Eingang', recvConfirm:'Eingang buchen', recvUndo:'Eingang stornieren',
+        recvWeek:'Diese Woche empfangen', recvWeekEmpty:'Diese Woche noch nichts empfangen.',
+        recvUpcoming:'Naechste Lieferungen', recvUpcomingEmpty:'Keine offenen Lieferungen dieser Woche.',
         recvUndoAsk:'Schon eingegangen - stornieren?', recvDone:'Eingang gebucht',
         recvUndone:'Storniert', recvElse:'Bei anderer Filiale eingegangen',
         recvNotShipped:'Nicht als ausgeliefert erfasst', recvUseBarcode:'Bitte Dachser-Barcode scannen',
@@ -333,6 +350,8 @@ var TXT = {
         shipBusy:'请先确认或取消', pending:'尚未上传',
         shipHeld:'出货已暂停，请重新确认', voided:'已作废',
         recv:'接货', recvConfirm:'确认接货', recvUndo:'确认撤回',
+        recvWeek:'本周接货', recvWeekEmpty:'本周尚无接货记录。',
+        recvUpcoming:'接下来的到货', recvUpcomingEmpty:'本周暂无待接收的出货。',
         recvUndoAsk:'已接货，是否撤回？', recvDone:'接货完成',
         recvUndone:'已撤回', recvElse:'已被其他门店接货',
         recvNotShipped:'未登记出货', recvUseBarcode:'请扫 Dachser 条码',
@@ -344,8 +363,52 @@ var TXT = {
         pickedElse:'已被其他设备抓货', tipGlare:'斜一点拿手机，避开反光',
         useSchein:'出货请扫 Transportschein', updated:'已更新到新版本',
         transfer:'调货单', noPickUm:'调货单无需抓货', kartons:'箱',
-        unshipDone:'已撤回出货', received:'门店已接货：' }
+        unshipDone:'已撤回出货', received:'门店已接货：' },
+  en: { title:'go asia Logistics', pick:'Pick Up', bind:'Ship', stand:'Status',
+        cam:'scan', camOff:'stop', photo:'take photo',
+        reload:'reload', save:'confirm', code:'pairing code', unpair:'unpair',
+        ready:'ready', newPal:'new pallet', saved:'saved',
+        already:'already on this pallet', unknown:'unknown number', needCode:'please scan barcode',
+        otherStore:'store mismatch', boundElse:'bound to another pallet',
+        chooseStore:'please select the store for this pallet',
+        storeSearch:'search stores', storeNoMatch:'no matching stores',
+        storeRequired:'please select a store before scanning the delivery note.',
+        storeListEmpty:'store list not loaded, please check filialen.txt and network connection.',
+        storeMismatch:'delivery note store does not match selected store',
+        storeMismatchConfirm:'selected store does not match some delivery notes, still want to confirm shipment?',
+        check:'checksum error', offline:'offline', noRead:'not recognized',
+        noCam:'unable to scan', reading:'…', dropped:'canceled', notFound:'not found',
+        needPair:'please pair first', pairFail:'pairing failed',
+        pairNoApi:'missing service address, please reopen the complete scan link.',
+        pairWrongApi:'scan link is invalid or has expired.',
+        pairCodeLength:'Please enter a 6-digit pairing code.',
+        pairLocked:'Too many failed attempts, please try again later.',
+        pairBadCode:'Invalid or expired pairing code.',
+        pairTooMany:'This account has reached the maximum number of devices.',
+        pairTimeout:'Server did not respond within 30 seconds.',
+        pairNetwork:'No response from server, please check your network connection.', readonly:'readonly',
+        palShipped:'This pallet has been shipped', palPartial:'This pallet has been partially shipped',
+        emptyPal:'No stickers on pallet', confirmShip:'Confirm Shipment', cancel:'Cancel',
+        shipDone:'Shipment Complete', queued:'Queued',
+        shipBusy:'Please confirm or cancel first', pending:'Not Uploaded',
+        shipHeld:'Shipment has been paused; please reconfirm', voided:'Voided',
+        recv:'Receive', recvConfirm:'Confirm Receipt', recvUndo:'Undo Receipt',
+        recvWeek:'Received this week', recvWeekEmpty:'No receipts this week.',
+        recvUpcoming:'Upcoming arrivals', recvUpcomingEmpty:'No shipments awaiting receipt this week.',
+        recvUndoAsk:'Receipt confirmed, do you want to undo?', recvDone:'Receipt Complete',
+        recvUndone:'Receipt undone', recvElse:'Already received by another store',
+        recvNotShipped:'Not shipped', recvUseBarcode:'Please scan Dachser barcode',
+        recvNeedNet:'Offline, can only scan Dachser barcode', offlineNoCheck:'Offline, cannot verify store',
+        forbidden:'No permission', close:'Close',
+        pickConfirm:'Confirm Pick', pickUndo:'Undo Pick', pickUndoAsk:'Pick confirmed, do you want to undo?',
+        pickDone:'Pick Complete', pickUndone:'Pick undone', notPicked:'Not Picked', needQr:'Please scan QR',
+        shipped:'Shipped', unship:'Unship',
+        pickedElse:'Already picked by another device', tipGlare:'Tilt your phone to avoid glare',
+        useSchein:'Please scan Transportschein when shipping', updated:'Updated to new version',
+        transfer:'Transfer Order', noPickUm:'Transfer Order does not require picking', kartons:'Cartons',
+        unshipDone:'Unship Complete', received:'Store has received:' }
 };
+var SPRACHEN = ['de', 'zh', 'en'];
 var lang = 'de';
 function t(k) { return (TXT[lang] && TXT[lang][k]) || TXT.de[k] || k; }
 
@@ -474,7 +537,7 @@ var laedt = false;
 var imSetup = false;
 
 function applyLang() {
-  document.documentElement.lang = lang === 'zh' ? 'zh' : 'de';
+  document.documentElement.lang = lang;
   document.title = t('title');
   Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (el) {
     el.textContent = t(el.dataset.t);
@@ -482,7 +545,7 @@ function applyLang() {
   Array.prototype.forEach.call(document.querySelectorAll('[data-ph]'), function (el) {
     el.placeholder = t(el.dataset.ph);
   });
-  $('lang').textContent = lang === 'zh' ? '中' : 'DE';
+  $('lang').textContent = { de:'DE', zh:'中', en:'EN' }[lang];
   $('btnCam').textContent = stream ? t('camOff') : t('cam');
   $('meRole').textContent = cfg.rolle || (cfg.rw ? '' : t('readonly'));
 
@@ -492,6 +555,7 @@ function applyLang() {
   palRender();
   pickRender();
   empRender();
+  recvWeekRender();
   paint();
   renderVerteilungen();
 }
@@ -867,6 +931,7 @@ function flushSchritt() {
       if (job.action === 'shipPallet') flashT('ok', 'shipDone', wo);
       if (job.action === 'receivePallet' || job.action === 'receiveUmlagerung') flashT('ok', 'recvDone', wo);
       if (job.action === 'unreceivePallet' || job.action === 'unreceiveUmlagerung') flashT('ok', 'recvUndone', wo);
+      if (job.action === 'receivePallet' || job.action === 'unreceivePallet') recvWeekLaden();
     }
     queueShow();
     return flushSchritt();
@@ -876,12 +941,16 @@ function flushSchritt() {
     return 'netz';
   });
 }
-window.addEventListener('online', function () { setNet(true); flush(); });
+window.addEventListener('online', function () {
+  setNet(true);
+  flush().then(function () { if (mode === 'recv') recvWeekLaden(); });
+});
 window.addEventListener('offline', function () { setNet(false); });
 
 document.addEventListener('visibilitychange', function () {
   if (document.hidden) return;
   autoPlanen(500);
+  if (mode === 'recv') recvWeekLaden();
   if (Date.now() - versionZuletzt > 60000) versionPruefen();
 });
 
@@ -906,6 +975,7 @@ function modusSetzen(neu) {
   if (mode !== 'recv' && emp && !emp.sende) { emp = null; empRender(); }
   flashT('', mode);
   if (mode === 'stand') sync();
+  if (mode === 'recv') recvWeekLaden();
 }
 
 function reiterRichten() {
@@ -1452,6 +1522,56 @@ function pickAbbrechen() {
   pk = null; pickRender(); flashT('', 'dropped');
 }
 
+var recvWeekState = { lists: [], upcoming: [], status: '' };
+var recvWeekRequest = 0;
+
+function recvWeekRender() {
+  var box = $('recvWeek');
+  var visible = mode === 'recv' && darf('receivePallet') && recvWeekState.status === 'ready';
+  show(box, visible);
+  if (!visible) return;
+  $('recvWeekTitle').textContent = t('recvWeek');
+  $('recvUpcomingTitle').textContent = t('recvUpcoming');
+  $('btnRecvWeek').textContent = t('reload');
+  var el = $('recvWeekList');
+  if (!recvWeekState.lists.length) {
+    el.innerHTML = '<div class="hint">' + esc(t('recvWeekEmpty')) + '</div>';
+  } else {
+    el.innerHTML = recvWeekState.lists.map(function (v) {
+      return '<div class="row"><span class="g">' + esc(v.name || v.vid) +
+        '<div class="s">' + esc(v.vid) + (v.receivedAt ? ' · ' + esc(kurzZeit(v.receivedAt)) : '') +
+        '</div></span></div>';
+    }).join('');
+  }
+  var upcoming = $('recvUpcomingList');
+  upcoming.innerHTML = recvWeekState.upcoming.length ? recvWeekState.upcoming.map(function (v) {
+    return '<div class="row"><span class="g">' + esc(v.name || v.vid) +
+      '<div class="s">' + esc(v.vid) + (v.shippedAt ? ' · ' + esc(kurzZeit(v.shippedAt)) : '') +
+      '</div></span></div>';
+  }).join('') : '<div class="hint">' + esc(t('recvUpcomingEmpty')) + '</div>';
+}
+
+function recvWeekLaden() {
+  if (!cfg.tok || !darf('receivePallet')) return Promise.resolve();
+  var nummer = ++recvWeekRequest, token = cfg.tok;
+  recvWeekState.status = 'loading';
+  recvWeekRender();
+  return mitFrist(apiGet('receiveWeek'), 20000).then(function (d) {
+    if (nummer !== recvWeekRequest || cfg.tok !== token) return;
+    if (!d || !d.ok || !Array.isArray(d.lists) || !Array.isArray(d.upcoming)) throw new Error('receiveWeek');
+    recvWeekState.lists = d.lists;
+    recvWeekState.upcoming = d.upcoming;
+    recvWeekState.status = 'ready';
+    recvWeekRender();
+  }).catch(function () {
+    if (nummer !== recvWeekRequest || cfg.tok !== token) return;
+    recvWeekState.lists = [];
+    recvWeekState.upcoming = [];
+    recvWeekState.status = 'error';
+    recvWeekRender();
+  });
+}
+
 var emp = null;
 
 var EMP_SCHONFRIST = 8000;
@@ -1679,7 +1799,11 @@ function empBuchen() {
   }
   e.sende = true; empRender();
   return mitFrist(apiPost(aktion, body), 15000).then(function (d) {
-    if (d && d.ok) { erledigt('ok', an ? 'recvDone' : 'recvUndone'); return; }
+    if (d && d.ok) {
+      erledigt('ok', an ? 'recvDone' : 'recvUndone');
+      if (!e.uid) recvWeekLaden();
+      return;
+    }
     e.sende = false;
 
     if (d && (d.code === 'received_elsewhere' || d.code === 'not_mine') && (d.pallet || d.umlagerung) && emp === e) {
@@ -1990,6 +2114,7 @@ $('btnPickOk').onclick = function () { pickBuchen(); };
 $('btnPickNo').onclick = function () { pickAbbrechen(); };
 $('btnRecvOk').onclick = function () { empBuchen(); };
 $('btnRecvNo').onclick = function () { empAbbrechen(); };
+$('btnRecvWeek').onclick = function () { recvWeekLaden(); };
 
 $('btnSync').onclick = function () {
   if (laedt) return;
@@ -2005,7 +2130,11 @@ $('btnSync').onclick = function () {
     autoPlanen();
   });
 };
-$('lang').onclick = function () { lang = lang === 'zh' ? 'de' : 'zh'; ls(K.lang, lang); applyLang(); };
+$('lang').onclick = function () {
+  lang = SPRACHEN[(SPRACHEN.indexOf(lang) + 1) % SPRACHEN.length];
+  ls(K.lang, lang);
+  applyLang();
+};
 
 function openSetup(on) {
   imSetup = !!on;
@@ -2077,7 +2206,7 @@ function pairCode(value) {
 }
 $('cfgCode').oninput = function () { this.value = pairCode(this.value); };
 
-var BUILD = '3e7f0a91c642';
+var BUILD = 'f532d81c70a6';
 var VERSION_TAKT = 600000, VERSION_FRIST = 900000;
 var versionUhr = 0, versionZiel = '', neuUhr = 0, versionZuletzt = 0;
 
@@ -2111,8 +2240,13 @@ function neuLaden() {
   location.reload();
 }
 
-lang = ls(K.lang) || ((navigator.language || '').slice(0, 2) === 'zh' ? 'zh' : 'de');
+var gespeicherteSprache = ls(K.lang);
+var browserSprache = (navigator.language || '').slice(0, 2).toLowerCase();
+lang = SPRACHEN.indexOf(gespeicherteSprache) >= 0 ? gespeicherteSprache :
+       SPRACHEN.indexOf(browserSprache) >= 0 ? browserSprache : 'de';
 function boot() {
+  recvWeekRequest++;
+  recvWeekState = { lists: [], upcoming: [], status: '' };
   $('who').textContent = cfg.who || '';
   openSetup(false);
   meldung = { kind:'', key:'ready', a:'', b:'', bKey:'' };
@@ -2123,6 +2257,7 @@ function boot() {
 
   werBinIch().then(function () {
     reiterRichten();
+    if (mode === 'recv' && recvWeekState.status !== 'loading') recvWeekLaden();
     return darf('sync') ? sync() : null;
   }).then(flush).then(function () { autoPlanen(); });
 }
