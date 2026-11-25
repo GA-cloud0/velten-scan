@@ -146,8 +146,9 @@
   #recvWeek { margin-top:8px; }
   #recvWeek .vk-kopf { align-items:center; }
   #recvWeekTitle { flex:1; font-size:16px; font-weight:700; }
-  #btnRecvWeek { border:1px solid var(--line); border-radius:8px; padding:6px 10px;
-    background:var(--bg); color:var(--gruen); font-size:13px; font-weight:700; }
+  #btnRecvWeek { border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    background:var(--bg); color:var(--gruen); font-size:14px; font-weight:700;
+    width:100%; text-align:left; }
   #btnRecvWeek:disabled { opacity:.6; }
 
   #recvBox.voll { position:fixed; inset:0; z-index:20; background:var(--bg); overflow-y:auto;
@@ -259,12 +260,14 @@
       </div>
       <div id="recvWeek" class="vk">
         <div class="vk-kopf">
-          <span id="recvWeekTitle" data-t="recvWeek">Diese Woche empfangen</span>
-          <button id="btnRecvWeek" type="button" data-t="reload">Laden</button>
+          <button id="btnRecvWeek" type="button" data-t="recvWeekToggle">Wochenübersicht anzeigen ▾</button>
         </div>
-        <div id="recvWeekList"></div>
-        <div class="vk-kopf" style="margin-top:12px"><span id="recvUpcomingTitle" data-t="recvUpcoming">Naechste Lieferungen</span></div>
-        <div id="recvUpcomingList"></div>
+        <div id="recvWeekBody" class="hide">
+          <div class="vk-kopf"><span id="recvWeekTitle" data-t="recvWeek">Diese Woche empfangen</span></div>
+          <div id="recvWeekList"></div>
+          <div class="vk-kopf" style="margin-top:12px"><span id="recvUpcomingTitle" data-t="recvUpcoming">Naechste Lieferungen</span></div>
+          <div id="recvUpcomingList"></div>
+        </div>
       </div>
     </section>
 
@@ -309,6 +312,7 @@ var TXT = {
         shipHeld:'Ausgang angehalten - neu bestaetigen', voided:'Entwertet',
         recv:'Eingang', recvConfirm:'Eingang buchen', recvUndo:'Eingang stornieren',
         recvWeek:'Diese Woche empfangen', recvWeekEmpty:'Diese Woche noch nichts empfangen.',
+        recvWeekToggle:'Wochenübersicht anzeigen', recvWeekHide:'Wochenübersicht schließen',
         recvUpcoming:'Naechste Lieferungen', recvUpcomingEmpty:'Keine offenen Lieferungen dieser Woche.',
         recvUndoAsk:'Schon eingegangen - stornieren?', recvDone:'Eingang gebucht',
         recvUndone:'Storniert', recvElse:'Bei anderer Filiale eingegangen',
@@ -316,6 +320,7 @@ var TXT = {
         recvExtra:'Weitere QR-Codes empfangen', recvExtraScan:'Weitere angekommen? QR-Code scannen.',
         recvExtraUnshipped:'Nicht versandt erfasst. QR-Codes scannen, um den Eingang einzeln zu buchen.',
         recvExtraConfirm:'Eingang fuer diesen QR-Code buchen', recvExtraNoNet:'Ergaenzender Eingang braucht eine Verbindung.',
+        recvExtraMore:'Weitere Ware auf dieser Palette angekommen?', recvYes:'Ja, weiteren QR-Code scannen', recvNo:'Nein, Palette abschließen',
         recvNeedNet:'Ohne Netz nur Dachser-Barcode', offlineNoCheck:'Offline - Filiale unbekannt',
         forbidden:'Keine Berechtigung', close:'Schliessen',
         pickConfirm:'Picken buchen', pickUndo:'Picken stornieren', pickUndoAsk:'Schon gepickt - stornieren?',
@@ -355,6 +360,7 @@ var TXT = {
         shipHeld:'出货已暂停，请重新确认', voided:'已作废',
         recv:'接货', recvConfirm:'确认接货', recvUndo:'确认撤回',
         recvWeek:'本周接货', recvWeekEmpty:'本周尚无接货记录。',
+        recvWeekToggle:'查看本周接货与待到货', recvWeekHide:'收起本周记录',
         recvUpcoming:'接下来的到货', recvUpcomingEmpty:'本周暂无待接收的出货。',
         recvUndoAsk:'已接货，是否撤回？', recvDone:'接货完成',
         recvUndone:'已撤回', recvElse:'已被其他门店接货',
@@ -362,6 +368,7 @@ var TXT = {
         recvExtra:'是否有到货补充？', recvExtraScan:'请扫描实际到货的 QR 码。',
         recvExtraUnshipped:'未登记出货，请逐张扫描 QR 码完成到货登记。',
         recvExtraConfirm:'确认此 QR 码到货', recvExtraNoNet:'补充接货需要网络连接。',
+        recvExtraMore:'板上还有其他到货吗？', recvYes:'是，继续扫 QR 码', recvNo:'否，结束此条码接货',
         recvNeedNet:'无网络时只能扫 Dachser 条码', offlineNoCheck:'离线，无法核对门店',
         forbidden:'无权限', close:'关闭',
         pickConfirm:'确认抓货', pickUndo:'撤回抓货', pickUndoAsk:'已抓货，是否撤回？',
@@ -401,6 +408,7 @@ var TXT = {
         shipHeld:'Shipment has been paused; please reconfirm', voided:'Voided',
         recv:'Receive', recvConfirm:'Confirm Receipt', recvUndo:'Undo Receipt',
         recvWeek:'Received this week', recvWeekEmpty:'No receipts this week.',
+        recvWeekToggle:'Show this week’s receipts and arrivals', recvWeekHide:'Hide weekly records',
         recvUpcoming:'Upcoming arrivals', recvUpcomingEmpty:'No shipments awaiting receipt this week.',
         recvUndoAsk:'Receipt confirmed, do you want to undo?', recvDone:'Receipt Complete',
         recvUndone:'Receipt undone', recvElse:'Already received by another store',
@@ -408,6 +416,7 @@ var TXT = {
         recvExtra:'Receive additional QR codes', recvExtraScan:'More arrivals? Scan a QR code.',
         recvExtraUnshipped:'Shipment not registered. Scan each QR code to record receipt.',
         recvExtraConfirm:'Confirm receipt of this QR code', recvExtraNoNet:'Supplemental receipt needs a connection.',
+        recvExtraMore:'Any more arrivals on this pallet?', recvYes:'Yes, scan another QR code', recvNo:'No, finish this barcode',
         recvNeedNet:'Offline, can only scan Dachser barcode', offlineNoCheck:'Offline, cannot verify store',
         forbidden:'No permission', close:'Close',
         pickConfirm:'Confirm Pick', pickUndo:'Undo Pick', pickUndoAsk:'Pick confirmed, do you want to undo?',
@@ -960,7 +969,6 @@ window.addEventListener('offline', function () { setNet(false); });
 document.addEventListener('visibilitychange', function () {
   if (document.hidden) return;
   autoPlanen(500);
-  if (mode === 'recv') recvWeekLaden();
   if (Date.now() - versionZuletzt > 60000) versionPruefen();
 });
 
@@ -985,7 +993,11 @@ function modusSetzen(neu) {
   if (mode !== 'recv' && emp && !emp.sende) { emp = null; empQrRest = []; empRender(); }
   flashT('', mode);
   if (mode === 'stand') sync();
-  if (mode === 'recv') recvWeekLaden();
+  if (mode === 'recv') {
+    recvScanStarted = false; recvWeekOpen = false;
+    recvWeekRequest++; recvWeekState.status = '';
+    recvWeekRender();
+  }
 }
 
 function reiterRichten() {
@@ -1533,16 +1545,21 @@ function pickAbbrechen() {
 }
 
 var recvWeekState = { lists: [], upcoming: [], status: '' };
-var recvWeekRequest = 0;
+var recvWeekRequest = 0, recvWeekOpen = false, recvScanStarted = false;
 
 function recvWeekRender() {
   var box = $('recvWeek');
-  var visible = mode === 'recv' && darf('receivePallet') && recvWeekState.status === 'ready';
+  var visible = mode === 'recv' && darf('receiveWeek') && !recvScanStarted && !emp && recvWeekState.status !== 'error';
   show(box, visible);
   if (!visible) return;
+  var open = recvWeekOpen && recvWeekState.status === 'ready';
+  show($('recvWeekBody'), open);
+  $('btnRecvWeek').disabled = recvWeekState.status === 'loading';
+  $('btnRecvWeek').textContent = recvWeekState.status === 'loading' ? t('reading') :
+    t(open ? 'recvWeekHide' : 'recvWeekToggle') + (open ? ' ▴' : ' ▾');
+  if (!open) return;
   $('recvWeekTitle').textContent = t('recvWeek');
   $('recvUpcomingTitle').textContent = t('recvUpcoming');
-  $('btnRecvWeek').textContent = t('reload');
   var el = $('recvWeekList');
   if (!recvWeekState.lists.length) {
     el.innerHTML = '<div class="hint">' + esc(t('recvWeekEmpty')) + '</div>';
@@ -1562,7 +1579,7 @@ function recvWeekRender() {
 }
 
 function recvWeekLaden() {
-  if (!cfg.tok || !darf('receivePallet')) return Promise.resolve();
+  if (!cfg.tok || !darf('receiveWeek') || !recvWeekOpen || recvScanStarted) return Promise.resolve();
   var nummer = ++recvWeekRequest, token = cfg.tok;
   recvWeekState.status = 'loading';
   recvWeekRender();
@@ -1580,6 +1597,14 @@ function recvWeekLaden() {
     recvWeekState.status = 'error';
     recvWeekRender();
   });
+}
+
+function recvWeekUmschalten() {
+  if (recvWeekOpen) {
+    recvWeekOpen = false; recvWeekRequest++; recvWeekRender();
+  } else {
+    recvWeekOpen = true; recvWeekLaden();
+  }
 }
 
 var emp = null, empQrRest = [];
@@ -1632,6 +1657,10 @@ function kurzZeit(wert) {
 }
 
 function doRecv(c) {
+  if (!recvScanStarted) {
+    recvScanStarted = true; recvWeekOpen = false; recvWeekRequest++;
+    recvWeekRender();
+  }
   if (c.kind === 'velten') {
     if (c.lids.length !== 1 && (!emp || emp.art !== 'extraScan')) {
       flashT('bad', 'recvUseBarcode'); return;
@@ -1682,6 +1711,7 @@ function empNachtrag() {
 
 function empLabelPruefen(lid, sscc) {
   if (!darf('receiveLabelInfo') || !darf('receiveLabel')) { flashT('bad', 'forbidden'); return; }
+  if (!sscc) { flashT('bad', 'recvUseBarcode'); return; }
   var e = emp = { art:'pruefen', code:lid, sscc:sscc || '', lids:[lid], store:'',
                   container:'', gesehen:{}, info:null, pruefen:true, sende:false, offline:false,
                   zeit:new Date().toISOString(), extra:true };
@@ -1690,7 +1720,9 @@ function empLabelPruefen(lid, sscc) {
     if (emp !== e) return;
     e.pruefen = false;
     if (!d || !d.ok || !d.label) {
-      emp = null; empRender();
+      emp = { art:'extraScan', code:sscc, sscc:sscc, lids:[], store:'', container:'',
+              gesehen:{}, info:null, pruefen:false, sende:false, offline:false };
+      empRender();
       if (d && d.code !== 'auth') flash('bad', d.error || t('notFound'), lid);
       return;
     }
@@ -1700,7 +1732,11 @@ function empLabelPruefen(lid, sscc) {
     flash(e.art === 'extraInfo' ? 'warn' : 'ok', d.label.store || '–', lid);
     if (e.art === 'extraInfo' && empQrRest.length) return empLabelPruefen(empQrRest.shift(), e.sscc);
   }).catch(function () {
-    if (emp === e) { emp = null; empRender(); flashT('bad', 'recvExtraNoNet'); }
+    if (emp === e) {
+      emp = { art:'extraScan', code:sscc, sscc:sscc, lids:[], store:'', container:'',
+              gesehen:{}, info:null, pruefen:false, sende:false, offline:false };
+      empRender(); flashT('bad', 'recvExtraNoNet');
+    }
   });
 }
 
@@ -1731,7 +1767,7 @@ function empPruefen(c) {
       empRender(); flashT('warn', 'recvExtraUnshipped'); return;
     }
     if (nichtRaus && c.kind === 'lid' && darf('receiveLabel')) {
-      return empLabelPruefen(c.value, d.pallet ? d.pallet.sscc : '');
+      emp = null; empRender(); flashT('bad', 'recvUseBarcode'); return;
     }
     if (nichtRaus) { emp = null; empRender(); flashT('bad', 'recvNotShipped', c.value.slice(-6)); return; }
     if (!d.found) { emp = null; empRender(); flashT('bad', 'notFound', c.value.slice(-6)); return; }
@@ -1812,6 +1848,8 @@ function empRender() {
     text = t('recvElse') + ': ' + ((e.label && e.label.receivedBy) || ''); teil = true;
   } else if (e.art === 'extraConfirm') {
     text = t('recvExtraConfirm'); teil = true;
+  } else if (e.art === 'extraMore') {
+    text = t('recvExtraMore'); teil = true;
   } else if (e.info && !e.uid && !p.shipped) {
     text = t('recvNotShipped'); teil = true;
   }
@@ -1830,19 +1868,20 @@ function empRender() {
   }).join('');
 
   var knopf = e.art === 'annehmen' ? 'recvConfirm' : e.art === 'stornieren' ? 'recvUndo' :
-              e.art === 'extraConfirm' ? 'recvExtraConfirm' : '';
+              e.art === 'extraConfirm' ? 'recvExtraConfirm' : e.art === 'extraMore' ? 'recvYes' : '';
   var ok = $('btnRecvOk');
   show(ok, !!knopf || e.pruefen);
   ok.disabled = e.pruefen || e.sende || !knopf;
   ok.className = 'b' + (e.art === 'stornieren' ? ' rot' : '');
   ok.innerHTML = (e.pruefen || e.sende) ? SPINNER : esc(t(knopf || 'recvConfirm'));
   show($('btnRecvExtra'), !e.uid && !e.pruefen && !e.sende &&
-       (e.art === 'extraInfo' || (!e.extra && e.art !== 'extraScan')) && darf('receiveLabel'));
-  $('btnRecvNo').textContent = t(e.art === 'info' ? 'close' : 'cancel');
+       (e.art === 'extraInfo' || (!e.extra && e.art !== 'extraScan' && e.art !== 'extraMore')) && darf('receiveLabel'));
+  $('btnRecvNo').textContent = t(e.art === 'extraMore' ? 'recvNo' : e.art === 'info' ? 'close' : 'cancel');
 }
 
 function empBuchen() {
   var e = emp;
+  if (e && e.art === 'extraMore') { empNachtrag(); return Promise.resolve(); }
   if (e && e.art === 'extraConfirm') {
     if (e.pruefen || e.sende) return Promise.resolve();
     e.sende = true; empRender();
@@ -1852,10 +1891,9 @@ function empBuchen() {
         e.sende = false;
         if (!d || !d.ok) { empRender(); if (!d || d.code !== 'auth') flash('bad', d && (d.error || d.code) || '', e.code); return; }
         var sscc = e.sscc, name = e.container, store = e.store;
-        emp = { art:'extraScan', code:sscc || e.code, sscc:sscc, lids:[], store:store,
+        emp = { art:'extraMore', code:sscc, sscc:sscc, lids:[e.code], store:store,
                 container:name, gesehen:{}, info:null, pruefen:false, sende:false, offline:false };
-        empRender(); flash('ok', e.code, t('recvDone') + ' · ' + t('recvExtraScan'));
-        recvWeekLaden();
+        empRender(); flash('ok', e.code, t('recvExtraMore'));
         if (empQrRest.length) return empLabelPruefen(empQrRest.shift(), sscc);
       }, function () { if (emp === e) { e.sende = false; empRender(); flashT('bad', 'recvExtraNoNet'); } });
   }
@@ -1883,10 +1921,10 @@ function empBuchen() {
     if (d && d.ok) {
       erledigt('ok', an ? 'recvDone' : 'recvUndone');
       if (an && !e.uid && darf('receiveLabel')) {
-        emp = { art:'extraScan', code:e.sscc, sscc:e.sscc, lids:[], store:e.store,
+        emp = { art:'extraMore', code:e.sscc, sscc:e.sscc, lids:[], store:e.store,
                 container:(e.info && e.info.container) || e.container || '', gesehen:{},
                 info:null, pruefen:false, sende:false, offline:false };
-        empRender(); flashT('warn', 'recvExtraScan');
+        empRender(); flashT('warn', 'recvExtraMore');
       }
       if (!e.uid) recvWeekLaden();
       return;
@@ -1910,10 +1948,11 @@ function empBuchen() {
 
 function empAbbrechen() {
   if (!emp || emp.sende) return;
+  var fertig = emp.art === 'extraMore';
   empQrRest = [];
 
   scanFreigeben([emp.sscc || emp.code].concat(emp.lids, [emp.code]));
-  emp = null; empRender(); flashT('', 'dropped');
+  emp = null; empRender(); flashT(fertig ? 'ok' : '', fertig ? 'recvDone' : 'dropped');
 }
 
 var standAuf = {};
@@ -2203,7 +2242,7 @@ $('btnPickNo').onclick = function () { pickAbbrechen(); };
 $('btnRecvOk').onclick = function () { empBuchen(); };
 $('btnRecvNo').onclick = function () { empAbbrechen(); };
 $('btnRecvExtra').onclick = function () { empNachtrag(); };
-$('btnRecvWeek').onclick = function () { recvWeekLaden(); };
+$('btnRecvWeek').onclick = function () { recvWeekUmschalten(); };
 
 $('btnSync').onclick = function () {
   if (laedt) return;
@@ -2336,6 +2375,7 @@ lang = SPRACHEN.indexOf(gespeicherteSprache) >= 0 ? gespeicherteSprache :
 function boot() {
   recvWeekRequest++;
   recvWeekState = { lists: [], upcoming: [], status: '' };
+  recvWeekOpen = false; recvScanStarted = false;
   $('who').textContent = cfg.who || '';
   openSetup(false);
   meldung = { kind:'', key:'ready', a:'', b:'', bKey:'' };
@@ -2346,7 +2386,7 @@ function boot() {
 
   werBinIch().then(function () {
     reiterRichten();
-    if (mode === 'recv' && recvWeekState.status !== 'loading') recvWeekLaden();
+    recvWeekRender();
     return darf('sync') ? sync() : null;
   }).then(flush).then(function () { autoPlanen(); });
 }
