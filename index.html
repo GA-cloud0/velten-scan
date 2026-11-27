@@ -65,15 +65,15 @@
   button.b.w { width:100%; }
   input { width:100%; padding:13px; font-size:17px; border-radius:10px; border:1px solid var(--line);
     background:var(--bg); color:var(--text); margin-top:8px; }
-  #palStoreSearch { width:100%; padding:13px; font-size:17px; border-radius:10px;
+  #palStoreSearch, #noSsccStoreSearch { width:100%; padding:13px; font-size:17px; border-radius:10px;
     border:2px solid var(--gruen); background:var(--bg); color:var(--text); margin-top:6px; }
-  #palStoreChoices { max-height:32vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  #palStoreChoices, #noSsccStoreChoices { max-height:32vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
     border:1px solid var(--line); border-radius:9px; margin-top:5px; background:var(--bg); }
-  #palStoreChoices button { display:block; width:100%; padding:12px; border:0;
+  #palStoreChoices button, #noSsccStoreChoices button { display:block; width:100%; padding:12px; border:0;
     border-bottom:1px solid var(--line); background:var(--bg); color:var(--text);
     text-align:left; font-size:16px; }
-  #palStoreChoices button:last-child { border-bottom:0; }
-  #palStoreChoices .hint { padding:10px; }
+  #palStoreChoices button:last-child, #noSsccStoreChoices button:last-child { border-bottom:0; }
+  #palStoreChoices .hint, #noSsccStoreChoices .hint { padding:10px; }
 
   .camTools { position:absolute; right:8px; bottom:8px; display:flex; gap:6px; }
   .camTools button { border:0; border-radius:8px; padding:6px 11px; font-size:15px; font-weight:800;
@@ -223,6 +223,25 @@
     </section>
 
     <section id="mBind" class="hide">
+      <button id="btnNoSsccMode" type="button" class="b g w" data-t="shipNoSscc">无SSCC出货</button>
+      <div id="noSsccBox" class="hide">
+        <div class="banner" id="noSsccHint"></div>
+        <div id="noSsccStoreBox">
+          <label class="lbl" for="noSsccStoreSearch" data-t="chooseStore">Filiale fuer diese Palette waehlen</label>
+          <input id="noSsccStoreSearch" type="search" autocomplete="off" data-ph="storeSearch"
+                 placeholder="Filiale suchen" role="combobox" aria-autocomplete="list"
+                 aria-controls="noSsccStoreChoices" aria-expanded="false">
+          <div id="noSsccStoreChoices" class="hide" role="listbox"></div>
+        </div>
+        <div class="big" id="noSsccStore"></div>
+        <div class="zweit" id="noSsccName"></div>
+        <div class="sscc" id="noSsccLids"></div>
+        <div class="two">
+          <button id="btnNoSsccCancel" type="button" class="b g" data-t="cancel">取消</button>
+          <button id="btnNoSsccContinue" type="button" class="b g" data-t="noSsccContinue">继续扫</button>
+          <button id="btnNoSsccConfirm" type="button" class="b" data-t="noSsccBoardEnd">本板结束</button>
+        </div>
+      </div>
       <div id="palletBox" class="hide">
         <div class="big" id="storeBig">&ndash;</div>
         <div class="sscc" id="ssccTxt"></div>
@@ -308,6 +327,14 @@ var TXT = {
         palShipped:'Schon ausgeliefert', palPartial:'Teilweise ausgeliefert',
         emptyPal:'Nichts gebunden', confirmShip:'Ausgang buchen', cancel:'Abbrechen',
         shipDone:'Ausgang gebucht', queued:'Wird gesendet',
+        shipNoSscc:'Ohne SSCC versenden', shipNoSsccExit:'Zurueck zum Palettenausgang',
+        noSsccHint:'Filiale waehlen, QR-Codes dieser Palette scannen und dann Palette abschliessen.',
+        noSsccContinue:'Weiter scannen', noSsccBoardEnd:'Palette abschliessen',
+        noSsccConfirm:'Ausgang ohne SSCC buchen', noSsccUndoHint:'Bereits ohne SSCC versandt. Ausgang stornieren?',
+        noSsccSingleUndo:'Zum Stornieren einen einzelnen LID-QR-Code scannen.',
+        noSsccNet:'Ausgang ohne SSCC braucht eine Verbindung.',
+        recvStoreMismatch:'Empfangsfiliale stimmt nicht ueberein',
+        recvStoreMismatchConfirm:'Empfangsfiliale stimmt nicht ueberein. Trotzdem Eingang buchen?',
         shipBusy:'Erst buchen oder abbrechen', pending:'Noch nicht gesendet',
         shipHeld:'Ausgang angehalten - neu bestaetigen', voided:'Entwertet',
         recv:'Eingang', recvConfirm:'Eingang buchen', recvUndo:'Eingang stornieren',
@@ -356,6 +383,13 @@ var TXT = {
         palShipped:'该板已出货', palPartial:'该板部分已出货',
         emptyPal:'板上无贴纸', confirmShip:'确认出货', cancel:'取消',
         shipDone:'出货完成', queued:'待发送',
+        shipNoSscc:'无SSCC出货', shipNoSsccExit:'返回托盘出货',
+        noSsccHint:'先选门店，再逐张扫描本板二维码，最后点击“本板结束”。',
+        noSsccContinue:'继续扫', noSsccBoardEnd:'本板结束', noSsccConfirm:'确认无SSCC出货',
+        noSsccUndoHint:'已无SSCC出货，是否撤回？', noSsccSingleUndo:'请扫单张 LID 二维码撤回出货。',
+        noSsccNet:'无SSCC出货需要网络连接。',
+        recvStoreMismatch:'接货门店与分货单门店不符',
+        recvStoreMismatchConfirm:'接货门店与分货单门店不符，仍要确认接货吗？',
         shipBusy:'请先确认或取消', pending:'尚未上传',
         shipHeld:'出货已暂停，请重新确认', voided:'已作废',
         recv:'接货', recvConfirm:'确认接货', recvUndo:'确认撤回',
@@ -404,6 +438,14 @@ var TXT = {
         palShipped:'This pallet has been shipped', palPartial:'This pallet has been partially shipped',
         emptyPal:'No stickers on pallet', confirmShip:'Confirm Shipment', cancel:'Cancel',
         shipDone:'Shipment Complete', queued:'Queued',
+        shipNoSscc:'Ship without SSCC', shipNoSsccExit:'Back to pallet shipping',
+        noSsccHint:'Choose a store, scan the QR codes on this pallet, then finish the pallet.',
+        noSsccContinue:'Scan next', noSsccBoardEnd:'Finish pallet',
+        noSsccConfirm:'Confirm shipment without SSCC', noSsccUndoHint:'Already shipped without SSCC. Undo shipment?',
+        noSsccSingleUndo:'Scan one LID QR code to undo shipment.',
+        noSsccNet:'Shipping without SSCC requires a connection.',
+        recvStoreMismatch:'Receiving store differs from delivery note',
+        recvStoreMismatchConfirm:'Receiving store differs from delivery note. Confirm receipt anyway?',
         shipBusy:'Please confirm or cancel first', pending:'Not Uploaded',
         shipHeld:'Shipment has been paused; please reconfirm', voided:'Voided',
         recv:'Receive', recvConfirm:'Confirm Receipt', recvUndo:'Undo Receipt',
@@ -572,6 +614,7 @@ function applyLang() {
   if (laedt) $('btnSync').innerHTML = SPINNER;
 
   palRender();
+  noSsccRender();
   pickRender();
   empRender();
   recvWeekRender();
@@ -976,6 +1019,11 @@ var mode = 'pick';
 
 function modusSetzen(neu) {
 
+  if (mode === 'bind' && neu !== 'bind' && noSsccSelection &&
+      (noSsccSelection.busy || noSsccSelection.lids.length)) {
+    flashT('warn', 'shipBusy'); return;
+  }
+
   mode = neu;
   scanFreigeben();
   Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (x) {
@@ -990,7 +1038,9 @@ function modusSetzen(neu) {
   if (mode === 'stand' && stream) stopCam();
 
   if (mode !== 'pick' && pk) { pk = null; pickRender(); }
-  if (mode !== 'recv' && emp && !emp.sende) { emp = null; empQrRest = []; empRender(); }
+  if (mode !== 'bind') { noSsccMode = false; noSsccSelection = null; }
+  noSsccRender();
+  if (mode !== 'recv' && emp && !emp.sende) { emp = null; empQrRest = []; empQrBatch = false; empRender(); }
   flashT('', mode);
   if (mode === 'stand') sync();
   if (mode === 'recv') {
@@ -1013,6 +1063,7 @@ function reiterRichten() {
 
   show($('btnSync'), sicht.stand);
   if (erlaubt.length && erlaubt.indexOf(mode) < 0) modusSetzen(erlaubt[0]);
+  noSsccRender();
 }
 
 Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
@@ -1024,7 +1075,139 @@ function listenName(vid) {
   return !v ? '' : (v.frisch ? FRISCH + ' ' : '') + String(v.name || '');
 }
 
-var pal = null;
+var pal = null, noSsccMode = false, noSsccSelection = null;
+var noSsccStore = '', noSsccStoreQuery = '', noSsccStoreOpen = false;
+
+function noSsccBoardId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    var r = Math.floor(Math.random() * 16);
+    return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+  });
+}
+
+function noSsccStoreRender() {
+  var liste = $('noSsccStoreChoices'), suche = $('noSsccStoreSearch');
+  show($('noSsccStoreBox'), noSsccMode && !(noSsccSelection &&
+    (noSsccSelection.busy || noSsccSelection.lids.length)));
+  if (suche.value !== noSsccStoreQuery) suche.value = noSsccStoreQuery;
+  suche.setAttribute('aria-expanded', noSsccStoreOpen ? 'true' : 'false');
+  show(liste, noSsccStoreOpen);
+  if (!noSsccStoreOpen) return;
+  var treff = filialenTreffer(noSsccStoreQuery);
+  liste.innerHTML = treff.length ? treff.map(function (name, i) {
+    return '<button type="button" role="option" data-store="' + i + '">' + esc(name) + '</button>';
+  }).join('') : '<div class="hint">' + esc(t('storeNoMatch')) + '</div>';
+  Array.prototype.forEach.call(liste.querySelectorAll('[data-store]'), function (b) {
+    b.onclick = function () {
+      noSsccStore = treff[Number(b.dataset.store)] || '';
+      noSsccStoreQuery = noSsccStore; noSsccStoreOpen = false;
+      suche.blur(); noSsccRender();
+    };
+  });
+}
+
+function noSsccRender() {
+  show($('btnNoSsccMode'), mode === 'bind' && darf('shipLabelsNoSscc'));
+  $('btnNoSsccMode').textContent = t(noSsccMode ? 'shipNoSsccExit' : 'shipNoSscc');
+  show($('palletBox'), mode === 'bind' && !noSsccMode && !!pal);
+  show($('noSsccBox'), mode === 'bind' && noSsccMode);
+  var x = noSsccSelection;
+  noSsccStoreRender();
+  $('noSsccHint').textContent = x && x.undo ? t('noSsccUndoHint') : t('noSsccHint');
+  $('noSsccStore').textContent = noSsccStore;
+  $('noSsccName').textContent = x ? x.names.join(' / ') : '';
+  $('noSsccLids').textContent = x ? x.lids.join(' + ') : '';
+  show($('btnNoSsccCancel'), !!x);
+  show($('btnNoSsccContinue'), !!x && !x.undo && x.awaitingContinue);
+  show($('btnNoSsccConfirm'), !!x && x.lids.length > 0);
+  $('btnNoSsccConfirm').disabled = !!x && !!x.busy;
+  $('btnNoSsccCancel').disabled = !!x && !!x.busy;
+  $('btnNoSsccContinue').disabled = !!x && !!x.busy;
+  $('btnNoSsccConfirm').textContent = t(x && x.undo ? 'unship' : 'noSsccBoardEnd');
+}
+
+function noSsccToggle() {
+  if (noSsccSelection && noSsccSelection.lids.length) { flashT('warn', 'shipBusy'); return; }
+  if (!noSsccMode && pal) { flashT('warn', 'shipBusy'); return; }
+  noSsccMode = !noSsccMode;
+  noSsccSelection = null;
+  noSsccStore = ''; noSsccStoreQuery = ''; noSsccStoreOpen = false;
+  noSsccRender();
+  if (noSsccMode) $('noSsccStoreSearch').focus();
+  flashT('', noSsccMode ? 'noSsccHint' : 'bind');
+}
+
+function noSsccScan(c) {
+  if (!noSsccStore) { flashT('bad', 'storeRequired'); $('noSsccStoreSearch').focus(); return; }
+  if (noSsccSelection && (noSsccSelection.busy || noSsccSelection.awaitingContinue || noSsccSelection.undo)) {
+    flashT('warn', 'shipBusy'); return;
+  }
+  if (c.kind !== 'lid' && c.kind !== 'velten') { flashT('bad', 'needQr'); return; }
+  var lids = c.kind === 'velten' ? c.lids : [c.value];
+  var selection = noSsccSelection || { boardId:noSsccBoardId(), lids:[], stores:[], names:[],
+    firstScannedAt:new Date().toISOString(), undo:false, awaitingContinue:false, busy:false };
+  if (selection.lids.length + lids.length > 100) { flashT('bad', 'emptyPal'); return; }
+  selection.busy = true; noSsccSelection = selection;
+  noSsccRender();
+  return Promise.all(lids.map(function (lid) { return mitFrist(apiGet('lookup', { q:lid }), 10000); }))
+    .then(function (results) {
+      if (noSsccSelection !== selection) return;
+      var labels = results.map(function (d) { return d && d.ok && d.found && d.label; });
+      if (labels.some(function (l) { return !l; })) throw new Error(t('notFound'));
+      if (labels.some(function (l) { return l.status === '已作废'; })) throw new Error(t('voided'));
+      var shipped = labels.filter(function (l) { return l.status === '已出货'; });
+      if (shipped.length && (selection.lids.length || shipped.length !== labels.length ||
+          shipped.some(function (l) { return l.shipMode !== '无SSCC出货'; }))) throw new Error(t('palShipped'));
+      if (!shipped.length && labels.some(function (l) { return (l.sscc || []).length; }))
+        throw new Error(t('boundElse'));
+      selection.undo = shipped.length === labels.length;
+      if (selection.undo && (labels.length !== 1 || labels[0].receivedAt)) throw new Error(t('received'));
+      if (lids.some(function (lid) { return selection.lids.indexOf(lid) >= 0; }))
+        throw new Error(t('already'));
+      labels.forEach(function (l) {
+        if (selection.stores.indexOf(l.store) < 0) selection.stores.push(l.store);
+        if (l.name && selection.names.indexOf(l.name) < 0) selection.names.push(l.name);
+      });
+      selection.lids = selection.lids.concat(lids);
+      selection.busy = false; selection.awaitingContinue = !selection.undo;
+      noSsccRender();
+      if (selection.stores.some(function (store) { return storeKey(store) !== storeKey(noSsccStore); }))
+        flash('warn', t('storeMismatch'), noSsccStore + ' / ' + selection.stores.join(' / '));
+      else if (!selection.undo && labels.some(function (l) { return !l.pickedAt; })) flashT('warn', 'notPicked');
+      else flashT(selection.undo ? 'warn' : 'ok', selection.undo ? 'noSsccUndoHint' : 'noSsccBoardEnd');
+    }).catch(function (err) {
+      if (noSsccSelection !== selection) return;
+      selection.busy = false;
+      if (!selection.lids.length) noSsccSelection = null;
+      noSsccRender();
+      flash('bad', err && err.message || t('noSsccNet'), lids.join(' + '));
+    });
+}
+
+function noSsccBuchen() {
+  var x = noSsccSelection;
+  if (!x || x.busy || !x.lids.length) return;
+  var mismatch = x.stores.some(function (store) { return storeKey(store) !== storeKey(noSsccStore); });
+  if (!x.undo && !window.confirm(noSsccStore + ' · ' + x.lids.length + ' LID\n' +
+      (mismatch ? t('storeMismatchConfirm') + '\n' + x.stores.join(' / ') : t('noSsccConfirm')))) return;
+  x.busy = true; noSsccRender();
+  var action = x.undo ? 'unshipLabelNoSscc' : 'shipLabelsNoSscc';
+  var body = x.undo ? { lid:x.lids[0] } : { lids:x.lids, store:noSsccStore,
+    boardId:x.boardId, firstScannedAt:x.firstScannedAt, scannedAt:new Date().toISOString() };
+  return mitFrist(apiPost(action, body), 20000).then(function (d) {
+    if (!d || !d.ok) throw new Error(d && (d.error || d.code) || t('noSsccNet'));
+    if (noSsccSelection === x) {
+      noSsccSelection = null; noSsccStore = ''; noSsccStoreQuery = ''; noSsccStoreOpen = false;
+      noSsccRender(); $('noSsccStoreSearch').focus();
+    }
+    scanFreigeben(x.lids);
+    flashT('ok', x.undo ? 'unshipDone' : 'shipDone', x.lids.join(' + '));
+    sync(true);
+  }).catch(function (err) {
+    if (noSsccSelection === x) { x.busy = false; noSsccRender(); }
+    flash('bad', err && err.message || t('noSsccNet'), x.lids.join(' + '));
+  });
+}
 
 function palVorhanden(sscc) {
   return (cache.labels || []).filter(function (l) {
@@ -1279,6 +1462,8 @@ function onScan(text) {
 }
 
 function doBind(c) {
+
+  if (noSsccMode) return noSsccScan(c);
 
   if (c.kind === 'velten') { flashT('bad', 'useSchein'); return; }
   if (c.kind === 'sscc') {
@@ -1607,7 +1792,7 @@ function recvWeekUmschalten() {
   }
 }
 
-var emp = null, empQrRest = [];
+var emp = null, empQrRest = [], empQrBatch = false;
 
 var EMP_SCHONFRIST = 8000;
 var empZuletzt = null;
@@ -1662,12 +1847,11 @@ function doRecv(c) {
     recvWeekRender();
   }
   if (c.kind === 'velten') {
-    if (c.lids.length !== 1 && (!emp || emp.art !== 'extraScan')) {
-      flashT('bad', 'recvUseBarcode'); return;
-    }
+    if (!emp || emp.art !== 'extraScan') empQrBatch = c.lids.length > 1;
     empQrRest = c.lids.slice(1);
     c = { kind:'lid', value:c.lids[0] };
   }
+  else if (c.kind === 'lid' && !emp && empQrBatch) { empQrRest = []; empQrBatch = false; }
   if (c.kind !== 'sscc' && c.kind !== 'lid') return;
 
   if (emp && emp.art === 'extraScan' && c.kind === 'lid') return empLabelPruefen(c.value, emp.sscc);
@@ -1727,9 +1911,12 @@ function empLabelPruefen(lid, sscc) {
       return;
     }
     e.label = d.label; e.store = d.label.store; e.container = d.label.name;
+    e.mismatch = !!cfg.who && !String(d.label.store || '').replace(/\s+/g, '').toLowerCase()
+      .includes(String(cfg.who).replace(/\s+/g, '').toLowerCase());
     e.art = d.label.receivedAt ? 'extraInfo' : 'extraConfirm';
     empRender();
-    flash(e.art === 'extraInfo' ? 'warn' : 'ok', d.label.store || '–', lid);
+    if (e.mismatch) flash('warn', t('recvStoreMismatch'), cfg.who + ' / ' + d.label.store);
+    else flash(e.art === 'extraInfo' ? 'warn' : 'ok', d.label.store || '–', lid);
     if (e.art === 'extraInfo' && empQrRest.length) return empLabelPruefen(empQrRest.shift(), e.sscc);
   }).catch(function () {
     if (emp === e) {
@@ -1755,9 +1942,33 @@ function empPruefen(c) {
     e.pruefen = false;
     if (!d) throw new Error('netz');
     if (!d.ok) {
+      empQrRest = []; empQrBatch = false;
       emp = null; empRender();
       if (d.code !== 'auth') flash('bad', d.error || d.code || '', c.value.slice(-6));
       return;
+    }
+
+    if (d.label && d.label.shipMode === '无SSCC出货') {
+      var label = d.label;
+      if (!label.shipped) {
+        empQrRest = []; empQrBatch = false;
+        emp = null; empRender(); flashT('bad', 'recvNotShipped'); return;
+      }
+      e.info = label; e.noSscc = true; e.sscc = '';
+      e.store = label.store; e.container = label.name; e.lids = [label.lid];
+      e.mismatch = !!cfg.who && !String(label.store || '').replace(/\s+/g, '').toLowerCase()
+        .includes(String(cfg.who).replace(/\s+/g, '').toLowerCase());
+      e.art = label.receivedAt ?
+        (label.receivedBy === cfg.who ? 'noSsccUndo' : 'info') : 'noSsccConfirm';
+      empRender();
+      if (e.mismatch) flash('warn', t('recvStoreMismatch'), cfg.who + ' / ' + label.store);
+      else if (e.art === 'info') flashT('bad', 'recvElse', label.receivedBy);
+      else flashT(e.art === 'noSsccUndo' ? 'warn' : 'ok',
+                  e.art === 'noSsccUndo' ? 'recvUndoAsk' : 'recvConfirm', label.lid);
+      return;
+    }
+    if (empQrBatch && c.kind === 'lid' && !d.label) {
+      empQrRest = []; empQrBatch = false; emp = null; empRender(); flashT('bad', 'recvUseBarcode'); return;
     }
 
     var nichtRaus = d.found ? d.ohnePalette || (d.pallet && !d.pallet.shipped && !d.pallet.receivedAt)
@@ -1792,7 +2003,10 @@ function empPruefen(c) {
     if (emp !== e) return;
     e.pruefen = false;
 
-    if (c.kind === 'lid') { emp = null; empRender(); flashT('bad', 'recvNeedNet'); return; }
+    if (c.kind === 'lid') {
+      empQrRest = []; empQrBatch = false;
+      emp = null; empRender(); flashT('bad', 'recvNeedNet'); return;
+    }
     e.offline = true;
     var hier = empLokal[ssccCore(e.sscc)], unterwegs2 = empAusstehend(e.sscc);
     var meins2 = unterwegs2 ? unterwegs2 === 'an' : !!hier;
@@ -1847,9 +2061,11 @@ function empRender() {
   } else if (e.art === 'extraInfo') {
     text = t('recvElse') + ': ' + ((e.label && e.label.receivedBy) || ''); teil = true;
   } else if (e.art === 'extraConfirm') {
-    text = t('recvExtraConfirm'); teil = true;
+    text = e.mismatch ? t('recvStoreMismatch') + ': ' + cfg.who + ' / ' + e.store : t('recvExtraConfirm'); teil = true;
   } else if (e.art === 'extraMore') {
     text = t('recvExtraMore'); teil = true;
+  } else if (e.noSscc && e.mismatch) {
+    text = t('recvStoreMismatch') + ': ' + cfg.who + ' / ' + e.store; teil = true;
   } else if (e.info && !e.uid && !p.shipped) {
     text = t('recvNotShipped'); teil = true;
   }
@@ -1858,6 +2074,7 @@ function empRender() {
 
   var schein = {};
   (p.scheine || []).forEach(function (s) { schein[s.lid] = s; });
+  if (e.noSscc) schein[e.code] = { kartons:p.kartons || '', frisch:false };
   $('recvList').innerHTML = e.lids.map(function (lid) {
     var ja = e.art === 'sammeln' ? !!e.gesehen[lid] : null, s = schein[lid];
     return '<div class="row"><span class="g"><span class="m">' + esc(lid) + '</span>' +
@@ -1868,13 +2085,14 @@ function empRender() {
   }).join('');
 
   var knopf = e.art === 'annehmen' ? 'recvConfirm' : e.art === 'stornieren' ? 'recvUndo' :
-              e.art === 'extraConfirm' ? 'recvExtraConfirm' : e.art === 'extraMore' ? 'recvYes' : '';
+              e.art === 'extraConfirm' ? 'recvExtraConfirm' : e.art === 'extraMore' ? 'recvYes' :
+              e.art === 'noSsccConfirm' ? 'recvConfirm' : e.art === 'noSsccUndo' ? 'recvUndo' : '';
   var ok = $('btnRecvOk');
   show(ok, !!knopf || e.pruefen);
   ok.disabled = e.pruefen || e.sende || !knopf;
-  ok.className = 'b' + (e.art === 'stornieren' ? ' rot' : '');
+  ok.className = 'b' + (e.art === 'stornieren' || e.art === 'noSsccUndo' ? ' rot' : '');
   ok.innerHTML = (e.pruefen || e.sende) ? SPINNER : esc(t(knopf || 'recvConfirm'));
-  show($('btnRecvExtra'), !e.uid && !e.pruefen && !e.sende &&
+  show($('btnRecvExtra'), !e.uid && !e.noSscc && !e.pruefen && !e.sende &&
        (e.art === 'extraInfo' || (!e.extra && e.art !== 'extraScan' && e.art !== 'extraMore')) && darf('receiveLabel'));
   $('btnRecvNo').textContent = t(e.art === 'extraMore' ? 'recvNo' : e.art === 'info' ? 'close' : 'cancel');
 }
@@ -1882,8 +2100,30 @@ function empRender() {
 function empBuchen() {
   var e = emp;
   if (e && e.art === 'extraMore') { empNachtrag(); return Promise.resolve(); }
+  if (e && e.noSscc && (e.art === 'noSsccConfirm' || e.art === 'noSsccUndo')) {
+    if (e.pruefen || e.sende) return Promise.resolve();
+    if (e.art === 'noSsccConfirm' && e.mismatch && !window.confirm(t('recvStoreMismatchConfirm') +
+        '\n' + cfg.who + ' / ' + e.store)) return Promise.resolve();
+    var receiving = e.art === 'noSsccConfirm';
+    e.sende = true; empRender();
+    return mitFrist(apiPost(receiving ? 'receiveLabel' : 'unreceiveLabel',
+      { lid:e.code, scannedAt:e.zeit }), 15000).then(function (d) {
+      if (emp !== e) return;
+      e.sende = false;
+      if (!d || !d.ok) { empRender(); flash('bad', d && (d.error || d.code) || t('recvNeedNet'), e.code); return; }
+      emp = null; empRender(); scanFreigeben([e.code]);
+      flashT('ok', receiving ? 'recvDone' : 'recvUndone', e.code);
+      if (empQrRest.length) return empPruefen({ kind:'lid', value:empQrRest.shift() });
+      empQrBatch = false;
+      recvWeekLaden();
+    }).catch(function () {
+      if (emp === e) { e.sende = false; empRender(); flashT('bad', 'recvNeedNet'); }
+    });
+  }
   if (e && e.art === 'extraConfirm') {
     if (e.pruefen || e.sende) return Promise.resolve();
+    if (e.mismatch && !window.confirm(t('recvStoreMismatchConfirm') +
+        '\n' + cfg.who + ' / ' + e.store)) return Promise.resolve();
     e.sende = true; empRender();
     return mitFrist(apiPost('receiveLabel', { lid:e.code, sscc:e.sscc, scannedAt:e.zeit }), 15000)
       .then(function (d) {
@@ -1950,6 +2190,7 @@ function empAbbrechen() {
   if (!emp || emp.sende) return;
   var fertig = emp.art === 'extraMore';
   empQrRest = [];
+  empQrBatch = false;
 
   scanFreigeben([emp.sscc || emp.code].concat(emp.lids, [emp.code]));
   emp = null; empRender(); flashT(fertig ? 'ok' : '', fertig ? 'recvDone' : 'dropped');
@@ -2237,6 +2478,27 @@ $('manual').oninput = function () {
 
 $('btnCommit').onclick = function () { palBuchen(); };
 $('btnDrop').onclick = function () { palAbbrechen(); };
+$('btnNoSsccMode').onclick = function () { noSsccToggle(); };
+$('btnNoSsccConfirm').onclick = function () { noSsccBuchen(); };
+$('btnNoSsccContinue').onclick = function () {
+  if (!noSsccSelection || noSsccSelection.busy) return;
+  noSsccSelection.awaitingContinue = false;
+  noSsccRender(); scanFreigeben(); flashT('', 'noSsccHint');
+};
+$('noSsccStoreSearch').onfocus = function () {
+  if (!noSsccMode || (noSsccSelection && (noSsccSelection.busy || noSsccSelection.lids.length))) return;
+  noSsccStoreOpen = true; this.select(); noSsccRender();
+};
+$('noSsccStoreSearch').oninput = function () {
+  if (!noSsccMode || (noSsccSelection && (noSsccSelection.busy || noSsccSelection.lids.length))) return;
+  noSsccStoreQuery = this.value; noSsccStore = ''; noSsccStoreOpen = true;
+  noSsccRender();
+};
+$('btnNoSsccCancel').onclick = function () {
+  if (noSsccSelection && noSsccSelection.busy) return;
+  noSsccSelection = null; noSsccStore = ''; noSsccStoreQuery = ''; noSsccStoreOpen = false;
+  noSsccRender(); scanFreigeben(); $('noSsccStoreSearch').focus();
+};
 $('btnPickOk').onclick = function () { pickBuchen(); };
 $('btnPickNo').onclick = function () { pickAbbrechen(); };
 $('btnRecvOk').onclick = function () { empBuchen(); };
@@ -2334,7 +2596,7 @@ function pairCode(value) {
 }
 $('cfgCode').oninput = function () { this.value = pairCode(this.value); };
 
-var BUILD = 'f532d81c70a6';
+var BUILD = '71a4c9ef12d0';
 var VERSION_TAKT = 600000, VERSION_FRIST = 900000;
 var versionUhr = 0, versionZiel = '', neuUhr = 0, versionZuletzt = 0;
 
@@ -2354,7 +2616,7 @@ function versionPlanen() {
 }
 
 function ruhig() {
-  return !pal && !pk && !emp && !stream && !queue.length && !flushing && !pairBusy && !laedt && !imSetup && !syncLauf;
+  return !pal && !pk && !emp && !noSsccSelection && !stream && !queue.length && !flushing && !pairBusy && !laedt && !imSetup && !syncLauf;
 }
 function neuLaden() {
   if (neuUhr) { clearTimeout(neuUhr); neuUhr = 0; }

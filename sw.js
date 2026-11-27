@@ -1,4 +1,4 @@
-var CACHE = 'velten-scan-v11';
+var CACHE = 'velten-scan-v17';
 var FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './logo.png', './filialen.txt',
              'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'];
 
